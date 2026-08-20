@@ -1,0 +1,24 @@
+# Local reference wireframes; intentionally not part of the repository.
+/AXIS.webp
+
+# Secrets and local environment overrides.
+.env
+.env.*
+!.env.example
+
+# Frontend dependencies and generated compiler output.
+/frontend/node_modules/
+/frontend/dist/
+/frontend/*.tsbuildinfo
+/frontend/vite.config.js
+/frontend/vite.config.d.ts
+
+# Vite writes the production PWA here. Only the marker is versioned so Go can
+# embed the directory in a fresh source checkout.
+/backend/web/dist/*
+!/backend/web/dist/.gitkeep
+
+# Local build and editor output.
+/axis
+*.log
+.DS_Store
