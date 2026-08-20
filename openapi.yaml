@@ -1,0 +1,628 @@
+openapi: 3.0.3
+info:
+  title: AXIS Smart Irrigation API
+  version: 0.1.0
+  description: >-
+    Stateless hackathon API for catalog lookup and deterministic irrigation
+    recommendations. Farmer/plot/history persistence lives on-device in IndexedDB.
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+  /catalog:
+    get:
+      operationId: getCatalog
+      responses:
+        '200':
+          description: Crop, stage and irrigation-method catalog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Catalog'
+  /recommendations:
+    post:
+      operationId: createRecommendation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommendationRequest'
+      responses:
+        '200':
+          description: Deterministic irrigation recommendation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IrrigationRecommendation'
+        '400':
+          description: Invalid farmer/plot input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '422':
+          description: Weather inputs invalid after provider fallback attempts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Internal programming/server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /insights:
+    post:
+      operationId: createInsight
+      description: Optional, feature-flagged AI explanation. Never changes the deterministic recommendation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InsightRequest'
+      responses:
+        '200':
+          description: AI-generated explanation grounded in supplied AXIS data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InsightResponse'
+        '404':
+          description: AI insights are disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '502':
+          description: AI provider unavailable; recommendation remains unchanged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+components:
+  schemas:
+    Health:
+      type: object
+      required: [status, version, engine_version, weather_mode, ai_insights_enabled, sensor_support]
+      properties:
+        status:
+          type: string
+          example: ok
+        version:
+          type: string
+          example: 0.1.0
+        engine_version:
+          type: string
+          example: 0.1.0
+        weather_mode:
+          type: string
+          enum: [live, fixture]
+        ai_insights_enabled:
+          type: boolean
+        sensor_support:
+          type: object
+          required: [soil_moisture_context, flow_meter_events]
+          properties:
+            soil_moisture_context:
+              type: boolean
+            flow_meter_events:
+              type: boolean
+
+    RecommendationRequest:
+      type: object
+      required: [plot]
+      properties:
+        plot:
+          $ref: '#/components/schemas/PlotCalculationInput'
+        date:
+          type: string
+          format: date
+          description: Optional Nairobi-local planning date. Defaults to today.
+        previous_recommendation:
+          $ref: '#/components/schemas/PreviousRecommendation'
+
+    PlotCalculationInput:
+      type: object
+      required:
+        - id
+        - name
+        - lat
+        - lon
+        - area_m2
+        - crop_id
+        - planting_date
+        - planting_date_estimated
+        - irrigation_method_id
+      properties:
+        id:
+          type: string
+          minLength: 1
+          description: Browser-generated local identifier; server does not persist it.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        lat:
+          type: number
+          format: double
+        lon:
+          type: number
+          format: double
+        area_m2:
+          type: number
+          format: double
+          exclusiveMinimum: true
+          minimum: 0
+          maximum: 100000
+        crop_id:
+          type: string
+        planting_date:
+          type: string
+          format: date
+          description: Exact or estimated planting/transplanting date derived from crop age.
+        planting_date_estimated:
+          type: boolean
+        irrigation_method_id:
+          type: string
+        flow_rate_lpm:
+          type: number
+          format: double
+          exclusiveMinimum: true
+          minimum: 0
+          maximum: 10000
+          nullable: true
+        soil_moisture:
+          $ref: '#/components/schemas/SoilMoistureObservation'
+
+    SoilMoistureObservation:
+      type: object
+      required: [sensor_id, observed_at, volumetric_water_content_pct]
+      description: Optional hardware reading. It is context-only until calibration and an agronomically validated adjuster are enabled.
+      properties:
+        sensor_id:
+          type: string
+        observed_at:
+          type: string
+          format: date-time
+        volumetric_water_content_pct:
+          type: number
+          minimum: 0
+          maximum: 100
+        field_capacity_pct:
+          type: number
+          minimum: 0
+          maximum: 100
+        wilting_point_pct:
+          type: number
+          minimum: 0
+          maximum: 100
+        root_zone_depth_mm:
+          type: number
+          exclusiveMinimum: true
+          minimum: 0
+
+    PreviousRecommendation:
+      type: object
+      required: [date, litres_exact]
+      properties:
+        date:
+          type: string
+          format: date
+        litres_exact:
+          type: number
+          minimum: 0
+        et0_mm:
+          type: number
+          minimum: 0
+        rain_mm:
+          type: number
+          minimum: 0
+        stage_id:
+          $ref: '#/components/schemas/StageId'
+
+    Catalog:
+      type: object
+      required: [schema_version, engine_version, stages, crops, irrigation_methods]
+      properties:
+        schema_version:
+          type: string
+        engine_version:
+          type: string
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/StageCatalogItem'
+        crops:
+          type: array
+          items:
+            $ref: '#/components/schemas/CropCatalogItem'
+        irrigation_methods:
+          type: array
+          items:
+            $ref: '#/components/schemas/IrrigationMethod'
+
+    StageCatalogItem:
+      type: object
+      required: [id, display_name]
+      properties:
+        id:
+          $ref: '#/components/schemas/StageId'
+        display_name:
+          type: string
+        description:
+          type: string
+
+    CropCatalogItem:
+      type: object
+      required: [id, display_name, total_days, confidence, stage_days]
+      properties:
+        id:
+          type: string
+        display_name:
+          type: string
+        display_name_sw:
+          type: string
+        total_days:
+          type: integer
+          minimum: 1
+        confidence:
+          $ref: '#/components/schemas/ConfidenceLevel'
+        stage_days:
+          $ref: '#/components/schemas/StageDays'
+
+    StageDays:
+      type: object
+      required: [establishing, developing, productive, maturing]
+      properties:
+        establishing:
+          type: integer
+          minimum: 1
+        developing:
+          type: integer
+          minimum: 1
+        productive:
+          type: integer
+          minimum: 1
+        maturing:
+          type: integer
+          minimum: 1
+
+    IrrigationMethod:
+      type: object
+      required: [id, display_name, efficiency, preferred_window]
+      properties:
+        id:
+          type: string
+        display_name:
+          type: string
+        display_name_sw:
+          type: string
+        efficiency:
+          type: number
+          format: double
+          exclusiveMinimum: true
+          minimum: 0
+          maximum: 1
+        preferred_window:
+          $ref: '#/components/schemas/Window'
+
+    IrrigationRecommendation:
+      type: object
+      required:
+        - plot_id
+        - date
+        - generated_at
+        - engine_version
+        - crop_stage
+        - decision
+        - weather
+        - explanation
+        - confidence
+        - warnings
+      properties:
+        plot_id:
+          type: string
+        date:
+          type: string
+          format: date
+        generated_at:
+          type: string
+          format: date-time
+        engine_version:
+          type: string
+        crop_stage:
+          $ref: '#/components/schemas/CropStageState'
+        decision:
+          $ref: '#/components/schemas/Decision'
+        weather:
+          $ref: '#/components/schemas/WeatherSummary'
+        explanation:
+          $ref: '#/components/schemas/Explanation'
+        confidence:
+          $ref: '#/components/schemas/ConfidenceInfo'
+        sensor_context:
+          $ref: '#/components/schemas/SensorContext'
+        comparison:
+          $ref: '#/components/schemas/PreviousComparison'
+        warnings:
+          type: array
+          items:
+            type: string
+
+    CropStageState:
+      type: object
+      required: [id, display_name, crop_age_days, stage_day]
+      properties:
+        id:
+          $ref: '#/components/schemas/StageId'
+        display_name:
+          type: string
+        crop_age_days:
+          type: integer
+          minimum: 0
+        stage_day:
+          type: integer
+          minimum: 1
+          description: One-based day within the canonical stage.
+
+    Decision:
+      type: object
+      required:
+        - action
+        - litres
+        - litres_exact
+        - gross_depth_mm
+        - recommended_window
+        - headline
+        - baseline_litres_no_rain
+        - rain_adjustment_litres
+      properties:
+        action:
+          type: string
+          enum: [IRRIGATE, REDUCED, SKIP]
+        litres:
+          type: integer
+          minimum: 0
+        litres_exact:
+          type: number
+          format: double
+          minimum: 0
+        gross_depth_mm:
+          type: number
+          format: double
+          minimum: 0
+        modeled_gross_depth_before_threshold_mm:
+          type: number
+          minimum: 0
+        duration_minutes:
+          type: integer
+          minimum: 0
+          nullable: true
+        recommended_window:
+          $ref: '#/components/schemas/Window'
+        headline:
+          type: string
+        baseline_litres_no_rain:
+          type: number
+          minimum: 0
+        rain_adjustment_litres:
+          type: number
+          minimum: 0
+          description: max(0, no-rain baseline minus recommended litres); not a general water-saved claim.
+        previous_recommendation_delta_litres:
+          type: number
+
+    WeatherSummary:
+      type: object
+      required:
+        - source
+        - t_min_c
+        - t_max_c
+        - rain_next_24h_mm
+        - et0_mm
+        - et0_method
+      properties:
+        source:
+          type: string
+          enum: [KIJANISPACE, MEMORY_CACHE, CLIMATOLOGY, DEMO_FIXTURE]
+        provider_observed_at:
+          type: string
+          format: date-time
+          nullable: true
+        t_min_c:
+          type: number
+        t_max_c:
+          type: number
+        wind_ms:
+          type: number
+          nullable: true
+        rain_next_24h_mm:
+          type: number
+          minimum: 0
+        rain_probability:
+          type: number
+          minimum: 0
+          maximum: 1
+          nullable: true
+        et0_mm:
+          type: number
+          minimum: 0
+        et0_method:
+          type: string
+          enum: [PROVIDER, HARGREAVES]
+
+    Explanation:
+      type: object
+      required: [steps]
+      properties:
+        summary:
+          type: string
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExplanationStep'
+
+    ExplanationStep:
+      type: object
+      required: [key, label, value, unit]
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        value:
+          type: number
+        unit:
+          type: string
+        note:
+          type: string
+
+    ConfidenceInfo:
+      type: object
+      required: [level, reasons]
+      properties:
+        level:
+          $ref: '#/components/schemas/ConfidenceLevel'
+        reasons:
+          type: array
+          items:
+            type: string
+
+    SensorContext:
+      type: object
+      required: [soil_moisture_connected, used_for_adjustment, status]
+      properties:
+        soil_moisture_connected:
+          type: boolean
+        used_for_adjustment:
+          type: boolean
+        status:
+          type: string
+          enum: [NOT_CONNECTED, STALE, UNCALIBRATED, CALIBRATED_PREVIEW]
+        reason:
+          type: string
+
+    PreviousComparison:
+      type: object
+      required: [summary, factors]
+      properties:
+        summary:
+          type: string
+        factors:
+          type: array
+          items:
+            type: object
+            required: [key, label, direction]
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              change:
+                type: number
+              unit:
+                type: string
+              direction:
+                type: string
+                enum: [INCREASED, DECREASED, UNCHANGED, CHANGED]
+              note:
+                type: string
+
+    ConfidenceLevel:
+      type: string
+      enum: [HIGH, MEDIUM, LOW]
+
+    StageId:
+      type: string
+      enum: [establishing, developing, productive, maturing]
+
+    Window:
+      type: string
+      enum: [EARLY_MORNING, EVENING, ANY]
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_FAILED
+                - UNKNOWN_CROP
+                - UNKNOWN_IRRIGATION_METHOD
+                - INVALID_DATE
+                - INVALID_WEATHER_INPUT
+                - INTERNAL
+                - AI_INSIGHTS_DISABLED
+                - AI_INSIGHT_FAILED
+            message:
+              type: string
+            field:
+              type: string
+
+    InsightRequest:
+      type: object
+      required: [recommendation, history]
+      properties:
+        recommendation:
+          $ref: '#/components/schemas/IrrigationRecommendation'
+        history:
+          type: array
+          maxItems: 7
+          items:
+            $ref: '#/components/schemas/InsightHistoryItem'
+        language:
+          type: string
+          enum: [en, sw]
+
+    InsightHistoryItem:
+      type: object
+      required: [date, recommended_litres]
+      properties:
+        date:
+          type: string
+          format: date
+        recommended_litres:
+          type: number
+          minimum: 0
+        applied_litres:
+          type: number
+          minimum: 0
+        rain_adjustment_litres:
+          type: number
+          minimum: 0
+
+    InsightResponse:
+      type: object
+      required: [summary, observations, language, generated_at, label]
+      properties:
+        summary:
+          type: string
+        observations:
+          type: array
+          items:
+            type: string
+        language:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
+        label:
+          type: string
+          example: AI-generated explanation
