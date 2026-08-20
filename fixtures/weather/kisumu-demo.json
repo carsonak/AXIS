@@ -1,0 +1,7 @@
+{
+  "source": "DEMO_FIXTURE",
+  "t_min_c": 17.4,
+  "t_max_c": 28.8,
+  "rain_next_24h_mm": 4.0,
+  "rain_probability": 0.55
+}

@@ -1,0 +1,49 @@
+{
+  "plot_id": "local-uuid",
+  "date": "2026-08-20",
+  "generated_at": "2026-08-20T15:10:00Z",
+  "engine_version": "0.1.0",
+  "crop_stage": {
+    "id": "productive",
+    "display_name": "Flowering / fruiting / peak growth",
+    "crop_age_days": 74,
+    "stage_day": 5
+  },
+  "decision": {
+    "action": "REDUCED",
+    "litres": 2400,
+    "litres_exact": 2424.6,
+    "gross_depth_mm": 2.4,
+    "modeled_gross_depth_before_threshold_mm": 2.4,
+    "duration_minutes": 55,
+    "recommended_window": "EARLY_MORNING",
+    "headline": "Apply a rain-adjusted 2,400 litres today, preferably early morning.",
+    "baseline_litres_no_rain": 6021.8,
+    "rain_adjustment_litres": 3597.2
+  },
+  "weather": {
+    "source": "DEMO_FIXTURE",
+    "t_min_c": 17.4,
+    "t_max_c": 28.8,
+    "rain_next_24h_mm": 4,
+    "rain_probability": 0.55,
+    "et0_mm": 4.658136182389694,
+    "et0_method": "HARGREAVES"
+  },
+  "explanation": {
+    "summary": "AXIS estimates daily crop water use, subtracts qualifying forecast rain, adjusts for irrigation efficiency, and converts the result to litres.",
+    "steps": [
+      {"key":"et0","label":"Weather water demand","value":4.66,"unit":"mm"},
+      {"key":"kc","label":"Crop factor","value":1.15,"unit":""},
+      {"key":"etc","label":"Estimated crop water use","value":5.36,"unit":"mm"},
+      {"key":"rain","label":"Forecast rain credited","value":3.2,"unit":"mm"},
+      {"key":"efficiency","label":"Drip efficiency","value":90,"unit":"%"},
+      {"key":"area","label":"Plot area","value":1011.7,"unit":"m²"},
+      {"key":"baseline","label":"Without forecast rain","value":6021.8,"unit":"L"},
+      {"key":"litres","label":"Water to apply","value":2424.6,"unit":"L"}
+    ]
+  },
+  "confidence": {"level":"LOW","reasons":["Deterministic demo weather"]},
+  "sensor_context": {"soil_moisture_connected":false,"used_for_adjustment":false,"status":"NOT_CONNECTED","reason":"AXIS is operating in sensor-free model mode."},
+  "warnings": []
+}

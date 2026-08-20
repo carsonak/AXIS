@@ -1,0 +1,220 @@
+{
+  "$comment": "AXIS hackathon agronomic configuration. Based on the supplied FAO-56-oriented crops.json, with stage names normalized to establishing/developing/productive/maturing. The developing stage linearly interpolates Kc from establishing to productive; the maturing stage interpolates from productive to the maturing/end Kc. Soil types are intentionally excluded from P0.",
+  "schema_version": "2.0.0",
+  "engine_version": "0.1.0",
+  "crops": [
+    {
+      "id": "tomato",
+      "display_name": "Tomato",
+      "display_name_sw": "Nyanya",
+      "kc": {
+        "establishing": 0.6,
+        "productive": 1.15,
+        "maturing": 0.8
+      },
+      "stage_days": {
+        "establishing": 30,
+        "developing": 40,
+        "productive": 40,
+        "maturing": 25
+      },
+      "total_days": 135,
+      "confidence": "HIGH",
+      "source": "FAO-56 Table 12 (tomato, fresh market)",
+      "note": "Kc_end 0.80 assumes harvest of fresh fruit rather than full senescence."
+    },
+    {
+      "id": "maize",
+      "display_name": "Maize",
+      "display_name_sw": "Mahindi",
+      "kc": {
+        "establishing": 0.3,
+        "productive": 1.2,
+        "maturing": 0.35
+      },
+      "stage_days": {
+        "establishing": 25,
+        "developing": 40,
+        "productive": 45,
+        "maturing": 30
+      },
+      "total_days": 140,
+      "confidence": "HIGH",
+      "source": "FAO-56 Table 12 (maize, grain)",
+      "note": "Kc_end 0.35 is for grain harvested dry. If harvested green, Kc_end rises to 0.60 - not modelled in v1."
+    },
+    {
+      "id": "onion_dry",
+      "display_name": "Onion",
+      "display_name_sw": "Kitunguu",
+      "kc": {
+        "establishing": 0.7,
+        "productive": 1.05,
+        "maturing": 0.75
+      },
+      "stage_days": {
+        "establishing": 15,
+        "developing": 25,
+        "productive": 70,
+        "maturing": 40
+      },
+      "total_days": 150,
+      "confidence": "HIGH",
+      "source": "FAO-56 Table 12 (onion, dry)"
+    },
+    {
+      "id": "french_beans",
+      "display_name": "French beans",
+      "display_name_sw": "Maharagwe ya kifaransa",
+      "kc": {
+        "establishing": 0.5,
+        "productive": 1.05,
+        "maturing": 0.9
+      },
+      "stage_days": {
+        "establishing": 20,
+        "developing": 30,
+        "productive": 30,
+        "maturing": 10
+      },
+      "total_days": 90,
+      "confidence": "HIGH",
+      "source": "FAO-56 Table 12 (beans, green)"
+    },
+    {
+      "id": "kale_sukuma",
+      "display_name": "Kale (sukuma wiki)",
+      "display_name_sw": "Sukuma wiki",
+      "kc": {
+        "establishing": 0.7,
+        "productive": 1.0,
+        "maturing": 0.95
+      },
+      "stage_days": {
+        "establishing": 25,
+        "developing": 30,
+        "productive": 45,
+        "maturing": 20
+      },
+      "total_days": 120,
+      "confidence": "MEDIUM",
+      "source": "Derived from FAO-56 Table 12 (cabbage) as proxy",
+      "note": "HACKATHON SIMPLIFICATION. Kale is not in FAO-56. Cabbage coefficients used, with Kc_mid reduced from 1.05 to 1.00 to reflect lower canopy closure under continuous-harvest management. Engine must downgrade recommendation confidence to MEDIUM for this crop."
+    },
+    {
+      "id": "vegetable_generic",
+      "display_name": "Other vegetable",
+      "display_name_sw": "Mboga nyingine",
+      "kc": {
+        "establishing": 0.6,
+        "productive": 1.05,
+        "maturing": 0.9
+      },
+      "stage_days": {
+        "establishing": 25,
+        "developing": 35,
+        "productive": 40,
+        "maturing": 20
+      },
+      "total_days": 120,
+      "confidence": "LOW",
+      "source": "Mid-range of FAO-56 Table 12 small-vegetable group",
+      "note": "HACKATHON SIMPLIFICATION. Explicit user-selected fallback only. The engine must NEVER default to this crop for an unrecognised crop id - unknown ids return UNKNOWN_CROP. Confidence is forced to LOW and the UI must say the estimate is approximate."
+    }
+  ],
+  "irrigation_methods": [
+    {
+      "id": "drip",
+      "display_name": "Drip",
+      "display_name_sw": "Matone",
+      "efficiency": 0.9,
+      "preferred_window": "EARLY_MORNING",
+      "source": "FAO-56 / FAO Irrigation Water Management Training Manual 4 - localised irrigation 85-95%"
+    },
+    {
+      "id": "sprinkler",
+      "display_name": "Sprinkler",
+      "display_name_sw": "Kunyunyizia",
+      "efficiency": 0.75,
+      "preferred_window": "EVENING",
+      "source": "FAO field application efficiency, sprinkler 70-80%"
+    },
+    {
+      "id": "furrow",
+      "display_name": "Furrow",
+      "display_name_sw": "Mifereji",
+      "efficiency": 0.6,
+      "preferred_window": "EARLY_MORNING",
+      "source": "FAO field application efficiency, furrow 55-70%"
+    },
+    {
+      "id": "basin_flood",
+      "display_name": "Basin / flood",
+      "display_name_sw": "Kufurika",
+      "efficiency": 0.55,
+      "preferred_window": "EARLY_MORNING",
+      "source": "FAO field application efficiency, basin 50-65%"
+    },
+    {
+      "id": "hose_manual",
+      "display_name": "Hosepipe",
+      "display_name_sw": "Bomba la mkono",
+      "efficiency": 0.65,
+      "preferred_window": "EVENING",
+      "note": "HACKATHON SIMPLIFICATION. No standard FAO figure. Estimated between furrow and sprinkler: targeted delivery but poor uniformity and no depth control."
+    },
+    {
+      "id": "watering_can",
+      "display_name": "Watering can / bucket",
+      "display_name_sw": "Ndoo",
+      "efficiency": 0.7,
+      "preferred_window": "EVENING",
+      "note": "HACKATHON SIMPLIFICATION. No standard FAO figure. Estimated above hosepipe because water is placed at the plant base, below drip because of spillage and uneven application."
+    }
+  ],
+  "constants": {
+    "solar_constant_mj_m2_min": 0.082,
+    "hargreaves_coefficient": 0.0023,
+    "hargreaves_temp_offset": 17.8,
+    "mj_to_mm_conversion": 0.408,
+    "m2_per_acre": 4046.8564224,
+    "m2_per_hectare": 10000.0,
+    "litres_per_mm_per_m2": 1.0,
+    "effective_rainfall_min_mm": 2.0,
+    "forecast_probability_threshold": 0.4,
+    "skip_threshold_mm": 1.0,
+    "kenya_utc_offset_hours": 3,
+    "effective_rainfall_factor_with_probability": 0.8,
+    "effective_rainfall_factor_without_probability": 0.5
+  },
+  "stage_model": {
+    "age_input_rule": "Farmer enters crop age or planting date once; client stores an exact/estimated planting_date anchor and derives age thereafter.",
+    "canonical_stages": [
+      {
+        "id": "establishing",
+        "display_name": "Germinating / establishing",
+        "display_name_sw": "Kuota / kuanza",
+        "fao56_stage": "initial"
+      },
+      {
+        "id": "developing",
+        "display_name": "Growing / developing",
+        "display_name_sw": "Kukua",
+        "fao56_stage": "development"
+      },
+      {
+        "id": "productive",
+        "display_name": "Flowering / fruiting / peak growth",
+        "display_name_sw": "Kuchanua / kuzaa / ukuaji wa juu",
+        "fao56_stage": "mid-season"
+      },
+      {
+        "id": "maturing",
+        "display_name": "Maturing / nearing harvest",
+        "display_name_sw": "Kukomaa / karibu kuvuna",
+        "fao56_stage": "late-season"
+      }
+    ]
+  },
+  "weather_fallback_note": "Climatology data belongs to the weather package, not this crop catalog. Reuse/verify the supplied climatology values there if needed."
+}

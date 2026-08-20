@@ -1,0 +1,263 @@
+{
+  "$comment": "Last-resort weather when the provider is unreachable AND no cached snapshot exists. Long-term monthly means. Any recommendation built on these values MUST use source CLIMATOLOGY with confidence LOW. Monthly rainfall is context only and must never be credited as a forecast.",
+  "regions": [
+    {
+      "id": "lake_victoria_basin",
+      "display_name": "Kisumu / Lake Victoria basin",
+      "lat_range": [
+        -1.5,
+        1.0
+      ],
+      "lon_range": [
+        33.5,
+        35.5
+      ],
+      "monthly": [
+        {
+          "month": 1,
+          "t_min_c": 18.0,
+          "t_max_c": 31.0,
+          "rain_mm_day": 1.9
+        },
+        {
+          "month": 2,
+          "t_min_c": 18.3,
+          "t_max_c": 31.5,
+          "rain_mm_day": 2.6
+        },
+        {
+          "month": 3,
+          "t_min_c": 18.5,
+          "t_max_c": 31.0,
+          "rain_mm_day": 4.5
+        },
+        {
+          "month": 4,
+          "t_min_c": 18.4,
+          "t_max_c": 29.5,
+          "rain_mm_day": 6.4
+        },
+        {
+          "month": 5,
+          "t_min_c": 18.0,
+          "t_max_c": 29.0,
+          "rain_mm_day": 5.5
+        },
+        {
+          "month": 6,
+          "t_min_c": 17.5,
+          "t_max_c": 29.0,
+          "rain_mm_day": 2.7
+        },
+        {
+          "month": 7,
+          "t_min_c": 17.2,
+          "t_max_c": 28.5,
+          "rain_mm_day": 2.2
+        },
+        {
+          "month": 8,
+          "t_min_c": 17.4,
+          "t_max_c": 28.8,
+          "rain_mm_day": 2.9
+        },
+        {
+          "month": 9,
+          "t_min_c": 17.6,
+          "t_max_c": 30.0,
+          "rain_mm_day": 2.6
+        },
+        {
+          "month": 10,
+          "t_min_c": 18.0,
+          "t_max_c": 30.5,
+          "rain_mm_day": 3.2
+        },
+        {
+          "month": 11,
+          "t_min_c": 18.0,
+          "t_max_c": 30.0,
+          "rain_mm_day": 3.6
+        },
+        {
+          "month": 12,
+          "t_min_c": 18.0,
+          "t_max_c": 30.5,
+          "rain_mm_day": 2.8
+        }
+      ]
+    },
+    {
+      "id": "central_highlands",
+      "display_name": "Central Kenya highlands",
+      "lat_range": [
+        -1.5,
+        0.5
+      ],
+      "lon_range": [
+        36.0,
+        38.0
+      ],
+      "monthly": [
+        {
+          "month": 1,
+          "t_min_c": 12.0,
+          "t_max_c": 26.0,
+          "rain_mm_day": 1.7
+        },
+        {
+          "month": 2,
+          "t_min_c": 12.5,
+          "t_max_c": 27.0,
+          "rain_mm_day": 1.9
+        },
+        {
+          "month": 3,
+          "t_min_c": 13.5,
+          "t_max_c": 26.5,
+          "rain_mm_day": 3.2
+        },
+        {
+          "month": 4,
+          "t_min_c": 14.0,
+          "t_max_c": 24.5,
+          "rain_mm_day": 6.8
+        },
+        {
+          "month": 5,
+          "t_min_c": 13.5,
+          "t_max_c": 23.0,
+          "rain_mm_day": 5.0
+        },
+        {
+          "month": 6,
+          "t_min_c": 12.0,
+          "t_max_c": 22.5,
+          "rain_mm_day": 1.2
+        },
+        {
+          "month": 7,
+          "t_min_c": 11.5,
+          "t_max_c": 21.5,
+          "rain_mm_day": 0.8
+        },
+        {
+          "month": 8,
+          "t_min_c": 11.5,
+          "t_max_c": 22.0,
+          "rain_mm_day": 1.0
+        },
+        {
+          "month": 9,
+          "t_min_c": 12.0,
+          "t_max_c": 24.5,
+          "rain_mm_day": 1.0
+        },
+        {
+          "month": 10,
+          "t_min_c": 13.5,
+          "t_max_c": 25.0,
+          "rain_mm_day": 3.5
+        },
+        {
+          "month": 11,
+          "t_min_c": 13.5,
+          "t_max_c": 23.5,
+          "rain_mm_day": 5.5
+        },
+        {
+          "month": 12,
+          "t_min_c": 12.5,
+          "t_max_c": 24.5,
+          "rain_mm_day": 2.7
+        }
+      ]
+    },
+    {
+      "id": "default_kenya",
+      "display_name": "Kenya (generic)",
+      "lat_range": [
+        -5.0,
+        5.0
+      ],
+      "lon_range": [
+        33.0,
+        42.0
+      ],
+      "monthly": [
+        {
+          "month": 1,
+          "t_min_c": 16.0,
+          "t_max_c": 29.0,
+          "rain_mm_day": 1.5
+        },
+        {
+          "month": 2,
+          "t_min_c": 16.5,
+          "t_max_c": 30.0,
+          "rain_mm_day": 1.8
+        },
+        {
+          "month": 3,
+          "t_min_c": 17.0,
+          "t_max_c": 29.5,
+          "rain_mm_day": 3.5
+        },
+        {
+          "month": 4,
+          "t_min_c": 17.0,
+          "t_max_c": 27.5,
+          "rain_mm_day": 6.0
+        },
+        {
+          "month": 5,
+          "t_min_c": 16.5,
+          "t_max_c": 26.5,
+          "rain_mm_day": 4.8
+        },
+        {
+          "month": 6,
+          "t_min_c": 15.5,
+          "t_max_c": 26.0,
+          "rain_mm_day": 1.8
+        },
+        {
+          "month": 7,
+          "t_min_c": 15.0,
+          "t_max_c": 25.5,
+          "rain_mm_day": 1.5
+        },
+        {
+          "month": 8,
+          "t_min_c": 15.2,
+          "t_max_c": 26.0,
+          "rain_mm_day": 1.8
+        },
+        {
+          "month": 9,
+          "t_min_c": 15.8,
+          "t_max_c": 27.5,
+          "rain_mm_day": 1.7
+        },
+        {
+          "month": 10,
+          "t_min_c": 16.5,
+          "t_max_c": 28.0,
+          "rain_mm_day": 3.3
+        },
+        {
+          "month": 11,
+          "t_min_c": 16.5,
+          "t_max_c": 27.0,
+          "rain_mm_day": 4.5
+        },
+        {
+          "month": 12,
+          "t_min_c": 16.0,
+          "t_max_c": 28.0,
+          "rain_mm_day": 2.5
+        }
+      ]
+    }
+  ]
+}
