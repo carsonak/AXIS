@@ -30,7 +30,7 @@ export default defineConfig({
     })
   ],
   server: { proxy: { '/api': 'http://localhost:8080' } },
-  // Preserve the tracked marker that lets Go embed an otherwise empty build
-  // directory in a fresh source-only checkout.
-  build: { outDir: '../backend/web/dist', emptyOutDir: false }
+  // Keep generated output below the tracked source marker so a build can clean
+  // its own directory without making the Git worktree dirty.
+  build: { outDir: '../backend/web/dist/generated', emptyOutDir: true }
 })

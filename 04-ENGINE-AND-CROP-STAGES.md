@@ -2,6 +2,13 @@
 
 Owner: **Member 3**. The engine is pure, deterministic, and contains no HTTP/database/network code.
 
+## Current progress — 20 August 2026
+
+- ✅ Catalog validation, one-based stage derivation and boundaries, Kc interpolation, Hargreaves ETo, rain thresholds, efficiency, unit conversion, duration, rounding, SKIP behavior, confidence, deterministic comparisons, and rain-adjustment baselines are implemented and tested.
+- ✅ The golden recommendation fixture is exercised by the engine test suite.
+- 🟡 Crop coefficients and the Kisumu demo result still need a second human agronomic sanity check before release.
+- ⛔ Soil-humidity adjustment remains deliberately inactive until its calibration model is validated; readings can only appear as non-authoritative context.
+
 ## 1. Farmer-facing crop-stage model
 
 AXIS asks for crop age at least once and then automatically derives one of four universal stages.

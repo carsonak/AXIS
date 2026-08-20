@@ -6,6 +6,8 @@
 
 We are building an **offline-friendly farming assistant that tells a farmer how much water their crop needs today**, using information about their farm, crop and upcoming weather.
 
+> **Implementation status — 20 August 2026:** The deterministic engine, API, offline-oriented PWA, local history, and fallback paths are implemented and pass automated checks. Live Kijani validation, container/deployment checks, and physical-phone offline testing remain pending. AI and sensor adjustment are bonus features and remain safely gated.
+
 ---
 
 ## The problem
@@ -266,7 +268,7 @@ Later, soil-moisture sensors can be added to improve or calibrate recommendation
 
 AXIS already defines a typed sensor seam for timestamped soil-humidity readings together with field-capacity, wilting-point and root-zone calibration. Raw or stale sensor percentages never silently alter the irrigation amount: the adjustment remains gated until the calibration and agronomic model are valid.
 
-Water-flow meters are supported through irrigation records. A meter adapter supplies cumulative start and end readings, and AXIS stores their difference as the measured water actually applied. The manual and recommendation-based logging paths remain available when no meter exists.
+Water-flow meters are supported today through manually entered cumulative start and end readings, and AXIS stores their difference as the measured water actually applied. Automatic device ingestion requires a future hardware adapter. Manual and recommendation-based logging remain available when no meter exists.
 
 This opens the possibility of one sensor being shared across several similar farms rather than requiring every farmer to purchase new hardware. This sensor-optional approach is one of the stronger opportunities identified in the research into Kenya's irrigation technology landscape.
 

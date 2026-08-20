@@ -1,5 +1,12 @@
 # Demo, Rubric Mapping, Definition of Done, and Risks
 
+## Current progress — 20 August 2026
+
+- ✅ Backend tests/vet and frontend typecheck/build have passed locally; deterministic rainy/dry, stage, unit, confidence, SKIP, and fixture behavior are covered.
+- 🟡 The rich P0/P1 screens and local data paths are implemented, but the checklist below deliberately remains unchecked until verified through the deployed URL and physical demo phone.
+- ⬜ Live Kijani, container execution, Fly deployment, two offline cycles, second-device testing, recording, and rehearsal are pending.
+- ⛔ AI and calibrated sensor adjustment have not passed the stretch gate and must remain disabled for release.
+
 ## 1. P0 Definition of Done
 
 Every item is verified on the deployed HTTPS URL and the physical demo phone.

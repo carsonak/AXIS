@@ -13,10 +13,10 @@
 /frontend/vite.config.js
 /frontend/vite.config.d.ts
 
-# Vite writes the production PWA here. Only the marker is versioned so Go can
-# embed the directory in a fresh source checkout.
+# Vite writes the production PWA below this directory. Only the marker is
+# versioned so Go can embed the parent directory in a fresh source checkout.
 /backend/web/dist/*
-!/backend/web/dist/.gitkeep
+!/backend/web/dist/source-only.txt
 
 # Local build and editor output.
 /axis

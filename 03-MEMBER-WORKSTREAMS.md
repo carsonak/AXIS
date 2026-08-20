@@ -6,7 +6,9 @@ Every task is labeled so developers know whether to start immediately or wait.
 
 **Primary ownership**
 
-`frontend/src/app`, `frontend/src/screens` except history, `frontend/src/components`, Tailwind config and public assets.
+`frontend/src/pages` except history, `frontend/src/components.tsx`, `frontend/src/context.tsx`, `frontend/src/styles.css`, and public assets.
+
+**Progress — 20 August 2026:** 🟡 The four-destination shell, plot form, Today dashboard, stage timeline, explanation, responsive styling, alerts, and multi-plot UI are implemented and typecheck/build successfully. Physical-phone visual and interaction QA remains pending. Styling was implemented with purpose-built CSS rather than Tailwind.
 
 **P0 deliverables**
 
@@ -47,6 +49,8 @@ React components, Tailwind layouts, form validation, accessibility labels, fixtu
 
 `backend/cmd/server`, `backend/internal/httpapi`, frontend asset embedding/serving.
 
+**Progress — 20 August 2026:** ✅ Health, catalog, recommendations, validation/errors, engine/weather wiring, static SPA/fallback serving, and the disabled-by-default insights shell are implemented and covered by Go tests. 🟡 Bound-port and deployed HTTPS smoke tests remain pending.
+
 **P0 deliverables**
 
 - [P][MUST] `GET /api/v1/health`.
@@ -85,6 +89,8 @@ Handler skeletons, DTOs, validation tables, HTTP tests, static-file serving.
 **Primary ownership**
 
 `backend/internal/irrigation`, `backend/internal/catalog`, root `crops.json`, `docs/AGRONOMY.md`.
+
+**Progress — 20 August 2026:** ✅ The catalog, stage/Kc/ETo/rain/efficiency/volume/duration/SKIP/confidence pipelines, deterministic comparisons, golden fixture, and critical tests are complete. 🟡 A second human agronomic sanity check remains pending; ⛔ sensor adjustment remains validation-gated.
 
 **P0 deliverables**
 
@@ -131,6 +137,8 @@ Test scaffolding and JSON validation. **Do not accept generated equations or coe
 
 `frontend/src/db.ts`, client data hooks/state, `frontend/vite.config.ts`, `frontend/src/pages/HistoryPage.tsx`.
 
+**Progress — 20 August 2026:** 🟡 Dexie repositories, saved recommendations, irrigation events, history list/chart, freshness, local analytics, PWA generation, insight cache, sensor context, and manual flow-meter deltas are implemented and compile. The required physical-phone offline reopen and offline-recording cycles remain pending.
+
 **P0 deliverables**
 
 - [P][MUST] Dexie schema: `plots`, `recommendations`, `events`, `catalog`, `settings`.
@@ -174,7 +182,9 @@ Dexie repositories, hooks, date/freshness helpers, local history, PWA manifest b
 
 **Primary ownership**
 
-`backend/internal/weather`, `frontend/src/api.ts`, `fixtures`, `openapi.yaml`, `Containerfile`, `fly.toml`, integration docs and `main` health.
+`backend/internal/weather`, `frontend/src/api.ts`, `fixtures`, `openapi.yaml`, `Containerfile`, the planned `fly.toml`, integration docs and `main` health.
+
+**Progress — 20 August 2026:** ✅ The provider abstraction, fixture, climatology, three-second Kijani client, one-hour memory cache, API client, and parser tests are implemented. 🟡 The container recipe is prepared but not run to completion. ⬜ Real Kijani capture, `fly.toml`, Fly deployment, and physical integration remain pending. ⛔ The AI adapter exists only as a disabled bonus scaffold.
 
 **P0 deliverables**
 

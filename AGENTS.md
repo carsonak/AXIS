@@ -15,7 +15,7 @@ These invariants apply to every human or AI contributor working in this reposito
 
 - Internal units are square metres, millimetres, litres, litres per minute, and degrees Celsius. Convert display units only at system boundaries.
 - `1 mm × 1 m² = 1 litre`. Irrigation efficiency is applied by division.
-- Crop stage identifiers are `INITIAL`, `DEVELOPMENT`, `MID_SEASON`, `LATE_SEASON`, and `COMPLETE`. `stage_day` is one-based.
+- Crop stage identifiers are `establishing`, `developing`, `productive`, and `maturing`. `stage_day` is one-based; crops beyond their configured duration remain in `maturing` with a warning.
 - Forecast rain below 2 mm or below 40% probability receives no credit. At or above the probability threshold, credit 80%; when probability is unavailable, credit 50%.
 - Never deduct climatological average rainfall as though it were a forecast.
 - Gross modeled requirements below 1 mm produce `SKIP` and zero application while retaining the sub-threshold deficit in the explanation.

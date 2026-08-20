@@ -1,0 +1,1 @@
+Generated PWA assets are intentionally not versioned. Run `make build` to populate `dist/generated`.

@@ -1,5 +1,13 @@
 # Architecture and Frozen Contracts
 
+## Current progress — 20 August 2026
+
+- ✅ The OpenAPI shapes, Go domain types, crop catalog, deterministic recommendation handler, errors, weather-source normalization, and optional insights boundary are implemented and covered by automated tests.
+- ✅ Farmer persistence remains device-local; the Go backend is stateless for plots, recommendations, events, sensors, and insights.
+- 🟡 Static PWA serving works in automated handler tests and production builds, but the deployed HTTPS path has not been verified.
+- 🟡 The Kijani contract is implemented defensively because the supplied success payload is untyped; real authenticated schema confirmation remains pending.
+- ⛔ Soil-humidity input is returned as context only. AI is disabled unless every server-side feature flag and provider setting is present.
+
 ## 1. Recommended MVP architecture
 
 AXIS is a **local-first PWA with a stateless Go calculation/weather service**.
@@ -17,7 +25,7 @@ IndexedDB already satisfies the important demo requirements: plot details persis
 | Concern | Decision | Hackathon reason |
 |---|---|---|
 | Frontend | React + TypeScript + Vite | Fastest agent-supported path; familiar ecosystem. |
-| Styling | Tailwind CSS | Fast mobile-first UI, little CSS merge contention. |
+| Styling | Purpose-built CSS | Implemented mobile-first styling without an additional runtime dependency. |
 | Routing | React Router | Small, predictable route structure. |
 | Local data | Dexie over IndexedDB | Typed, reliable local persistence and reactive reads. |
 | PWA | vite-plugin-pwa / Workbox | Installable shell and precaching with minimal custom service-worker code. |
@@ -262,7 +270,7 @@ Use:
 GET /v1/agro_climate/water?lat=<lat>&lon=<lon>
 ```
 
-The endpoint is described as one forecast day of water-relevant temperature, windspeed, and precipitation data. The spec currently gives the 200 response an empty/untyped schema, so **do not invent response field names**. Member 5 must capture one real authenticated response in H0–1 and write the mapping before the adapter is implemented.
+The endpoint is described as one forecast day of water-relevant temperature, windspeed, and precipitation data. The spec currently gives the 200 response an empty/untyped schema, so **do not present provisional aliases as verified field names**. The adapter now exists, but Member 5 must capture a real authenticated response, confirm units, and add a regression fixture before live use is considered complete.
 
 The spec advertises Bearer, API-key header/query, and HTTP Basic security alternatives. Obtain/verify whichever credential the organizers provide during the first hour.
 
@@ -272,8 +280,8 @@ For P0, use the `/water` endpoint, not `/land`, because `/water` is directly ali
 
 - `POST /api/v1/insights` is disabled by default. When configured, the backend sends the current deterministic explanation and at most seven selected history records to an OpenAI-compatible provider. The response contains explanatory text only and cannot alter recommendation fields.
 - AI credentials remain server-side, no history is persisted by the backend, and provider failure leaves the native explanation untouched.
-- Soil-humidity adapters provide timestamped VWC plus optional field-capacity, wilting-point and root-zone calibration. Stale or uncalibrated inputs never affect litres.
-- Flow-meter adapters provide cumulative start/end readings; the device stores their difference as measured applied litres.
+- The current soil-humidity preview accepts timestamped VWC plus optional field-capacity, wilting-point and root-zone calibration. Stale or uncalibrated inputs never affect litres, and the adjustment model remains inactive.
+- The current flow-meter path accepts manually entered cumulative start/end readings and stores their difference as measured applied litres. Automatic hardware ingestion remains a future adapter.
 
 ## 7. Repository structure
 

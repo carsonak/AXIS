@@ -42,6 +42,12 @@ The concrete deadline schedule below is authoritative. The older `H0–H24` brea
 
 **All tasks in this hour are [MUST].**
 
+### Progress — 20 August 2026
+
+- ✅ Branding, public API shapes, units, crop stages, ownership, Go/React scaffolds, health handler, and initial engine tests are complete.
+- 🟡 Local health is verified through `httptest`, not a bound server or deployed URL.
+- ⬜ Real Kijani response/auth capture, `kisumu-live.json`, completed Podman build, and Fly credential/deployment proof remain pending, so Gate G0 is not fully green.
+
 - Freeze request/response shapes in `openapi.yaml`.
 - Freeze the four canonical crop stages.
 - Freeze internal units: m², mm, litres, L/min, °C.
@@ -64,6 +70,12 @@ If G0 slips to H2, cut P1 history chart and extra crops immediately.
 ## H1–5 — parallel foundations
 
 Everything below is **[P]** after G0.
+
+### Progress — 20 August 2026
+
+- ✅ The mobile shell, plot form, Today fixture path, explanation, Go handlers, engine, Dexie repositories, PWA configuration, provider/cache/fallback chain, API client, and container recipe are implemented.
+- ✅ The independent backend suites and frontend typecheck/build pass.
+- 🟡 The container recipe has not completed a real build, the Kijani adapter has not parsed a captured live payload, and the shell has not reopened offline on a physical phone; Gate G1 remains partially verified.
 
 ### M1
 
@@ -113,6 +125,12 @@ Everything below is **[P]** after G0.
 
 Integrate in this exact order to keep failures local.
 
+### Progress — 20 August 2026
+
+- ✅ Weather → engine → API and UI → IndexedDB → refresh integrations are present, with fixture/fallback behavior exercised by automated checks.
+- 🟡 The integrated path has only been verified through tests and builds; it has not run as phone → deployed server → real Kijani.
+- ⬜ Gate G2 and the architecture-freeze evidence require a deployed physical-phone run with an authenticated live response.
+
 1. **H5–6 [INT M2+M3]** Replace stub engine with real `Compute`.
 2. **H6–7 [INT M2+M5]** Replace stub weather with provider chain.
 3. **H7–8 [INT M1+M4]** UI reads/writes plot and recommendation through IndexedDB repositories.
@@ -135,6 +153,12 @@ If it does not, **all P1 work stops** until it does.
 
 Priority order:
 
+### Progress — 20 August 2026
+
+- ✅ Explanation steps, derived stage/age, confidence/source/freshness presentation, fallback behavior, validation, and responsive layouts are implemented.
+- 🟡 The complete saved recommendation path compiles and the PWA is generated, but offline force-close/reopen and mobile visual QA have not been performed.
+- ⬜ The deployed smoke test is pending, so Gate G3 is not green and bonus work must remain gated.
+
 1. Offline reopen: force-close with airplane mode, reopen to saved plot + recommendation.
 2. Explanation screen shows all intermediate values.
 3. Stage chip visibly shows automatically derived stage and age.
@@ -153,6 +177,12 @@ If P0 is not green, H15–19 becomes P0-only; do not start P1.
 ## H15–19 — rich journey, P1 and polish
 
 Only start once G3 is green.
+
+### Progress — 20 August 2026
+
+- ✅ Flow-rate minutes, local irrigation events, manual cumulative flow-meter deltas, seven-day list/chart, rain adjustment, deterministic comparison, multi-plot switching, settings, and the optional insights shell are implemented and pass automated compilation/tests.
+- 🟡 These frontend interactions still need browser and physical-phone verification.
+- ⛔ AI remains disabled, soil readings remain preview-only context, and automatic sensor/meter hardware adapters are not implemented. These items do not qualify for the feature-freeze release unless their gates are passed.
 
 The Action + History bundle is not generic polish: flow minutes, offline logging and a simple seven-day history are P0. Complete the remaining enhancements in this order:
 
@@ -173,6 +203,12 @@ Anything not merged and working is dropped. No “almost finished” branches su
 
 ## H19–22 — harden
 
+### Progress — 20 August 2026
+
+- ✅ Automated Go tests/vet, TypeScript checking, and production PWA build have passed locally.
+- 🟡 Deterministic rainy, dry, fallback, and fixture cases are automated, but the final clean-tree `make check` will be rerun after handoff cleanup.
+- ⬜ Container execution, two offline device cycles, two-phone testing, deployed health, screen recording, and release-candidate tagging remain pending; Gate G4 is not green.
+
 - Run `make check` from clean pull.
 - Test at least one rainy/reduced case and one dry/irrigate case.
 - Test all unit conversions.
@@ -189,6 +225,11 @@ Anything not merged and working is dropped. No “almost finished” branches su
 Tag the release candidate. From here only demo-blocking fixes, each followed by a complete demo rerun.
 
 ## H22–24 — demo rehearsal and pitch
+
+### Progress — 20 August 2026
+
+- ⬜ Rehearsal, phone driving/narration roles, live/fixture switching practice, backup video, pitch answers, final deployment, and submission have not started.
+- ⛔ No release or submission claim should be made until Gate G4 and the physical-phone demo run pass.
 
 - Full 3–5 minute demo at least three times.
 - One person narrates; one person drives phone.

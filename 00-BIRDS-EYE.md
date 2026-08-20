@@ -2,6 +2,16 @@
 
 Use this page to reorient in under two minutes.
 
+## Current progress — 20 August 2026
+
+Status key: ✅ complete and automatically verified; 🟡 implemented but awaiting live/browser/device verification; ⬜ pending; ⛔ intentionally gated.
+
+- ✅ Deterministic engine, crop catalog, API handlers, fixture/climatology provider chain, cache behavior, golden fixture, and automated backend tests are complete.
+- 🟡 Today, Plots, History, More, IndexedDB storage, PWA generation, multi-plot switching, chart, settings, and manual flow-meter readings are implemented and build successfully; physical-phone behavior is not yet verified.
+- 🟡 The Kijani adapter is implemented against documented aliases, but a real authenticated payload has not been captured or regression-tested.
+- ⛔ AI is disabled by default. Soil-humidity readings are preview context only and never change litres; automatic hardware adapters are not implemented.
+- ⬜ Container execution, Fly deployment, two offline force-close/reopen cycles, second-device testing, rehearsal, recording, and submission remain release blockers.
+
 ## The demo loop
 
 1. Farmer creates a plot on a phone.
@@ -13,7 +23,7 @@ Use this page to reorient in under two minutes.
 7. Farmer can open “Why?” and see the calculation.
 8. Recommendation is saved in IndexedDB.
 9. Airplane mode is enabled; AXIS still opens and shows the saved recommendation.
-10. Farmer taps “I irrigated”; manual, recommendation-followed or flow-meter-measured volume updates seven-day history locally even offline.
+10. Farmer taps “I irrigated”; manual, recommendation-followed or manually entered cumulative flow-meter readings update seven-day history locally even offline.
 
 ## Architecture in one diagram
 
