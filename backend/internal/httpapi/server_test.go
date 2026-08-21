@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +20,15 @@ import (
 
 type recordingWeatherProvider struct {
 	requestedAt time.Time
+}
+
+type recordingInsightProvider struct {
+	input domain.InsightRequest
+}
+
+func (p *recordingInsightProvider) Generate(_ context.Context, input domain.InsightRequest) (domain.InsightResponse, error) {
+	p.input = input
+	return domain.InsightResponse{Summary: "Grounded answer.", Observations: []string{}, Language: input.Language, GeneratedAt: time.Date(2026, 8, 20, 15, 10, 0, 0, time.UTC), Label: "AI-generated explanation"}, nil
 }
 
 func (p *recordingWeatherProvider) Daily(_ context.Context, _, _ float64, requestedAt time.Time) (domain.WeatherSnapshot, error) {
@@ -110,5 +120,44 @@ func TestInvalidRequestAndDisabledInsights(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("disabled insights status = %d", rec.Code)
+	}
+}
+
+func TestInsightQuestionValidationAndForwarding(t *testing.T) {
+	provider := &recordingInsightProvider{}
+	server := testServer(t)
+	server.Insights = provider
+	handler := server.Handler()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/insights", bytes.NewBufferString(`{"question":"How did rain affect this plot?","recommendation":{},"history":[],"language":"en"}`))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	if provider.input.Question != "How did rain affect this plot?" {
+		t.Fatalf("question = %q", provider.input.Question)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/insights", bytes.NewBufferString(`{"question":"   ","recommendation":{},"history":[]}`))
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"field":"question"`) {
+		t.Fatalf("blank question response = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	history := make([]map[string]any, 8)
+	for i := range history {
+		history[i] = map[string]any{"date": "2026-08-20", "recommended_litres": i}
+	}
+	body, err := json.Marshal(map[string]any{"question": "Explain the pattern", "recommendation": map[string]any{}, "history": history})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/insights", bytes.NewReader(body))
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"field":"history"`) {
+		t.Fatalf("history limit response = %d: %s", rec.Code, rec.Body.String())
 	}
 }

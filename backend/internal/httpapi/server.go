@@ -120,6 +120,10 @@ func (s *Server) insight(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "VALIDATION_FAILED", "Request body must be valid JSON.", "")
 		return
 	}
+	if strings.TrimSpace(input.Question) == "" {
+		writeError(w, http.StatusBadRequest, "VALIDATION_FAILED", "A question is required.", "question")
+		return
+	}
 	if len(input.History) > 7 {
 		writeError(w, http.StatusBadRequest, "VALIDATION_FAILED", "At most seven history items may be analyzed.", "history")
 		return

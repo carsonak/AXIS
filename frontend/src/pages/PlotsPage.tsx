@@ -1,19 +1,11 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { AppHeader, Card, EmptyState, Page, SketchCrop } from '../components'
 import { useAxis } from '../context'
-import { repos } from '../db'
 import { cropAgeDays, deriveStage } from '../utils'
 
 export default function PlotsPage() {
-  const { plots, catalog, selectedPlot, selectPlot, reload } = useAxis()
+  const { plots, catalog, selectPlot } = useAxis()
   const navigate = useNavigate()
-
-  async function remove(id: string, e: React.MouseEvent) {
-    e.stopPropagation()
-    if (!window.confirm('Delete this plot and its local recommendation/history data?')) return
-    await repos.removePlot(id)
-    await reload()
-  }
 
   return (
     <Page>

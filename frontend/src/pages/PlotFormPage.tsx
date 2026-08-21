@@ -36,7 +36,7 @@ export default function PlotFormPage() {
       setPlantingDate(plot.plantingDate); setAgeMode('date'); setMethodId(plot.irrigationMethodId); setFlowRate(plot.flowRateLpm ? String(plot.flowRateLpm) : '')
       setAreaUnit(settings.areaUnit); setArea(String(fromM2(plot.areaM2, settings.areaUnit)))
     })
-  }, [plotId])
+  }, [plotId, settings.areaUnit])
 
   const resolvedPlantingDate = ageMode === 'date' ? plantingDate : plantingDateFromAge(Number(age || 0), ageUnit)
   const crop = catalog?.crops.find(item => item.id === cropId)

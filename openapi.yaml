@@ -578,8 +578,11 @@ components:
 
     InsightRequest:
       type: object
-      required: [recommendation, history]
+      required: [question, recommendation, history]
       properties:
+        question:
+          type: string
+          minLength: 1
         recommendation:
           $ref: '#/components/schemas/IrrigationRecommendation'
         history:

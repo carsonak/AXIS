@@ -58,8 +58,13 @@ export interface Settings {
   id: 'app'; selectedPlotId?: string; areaUnit: 'acre' | 'hectare' | 'm2'; language: 'en' | 'sw'; defaultIrrigationMethodId?: string
 }
 
+/**
+ * AI qualitative explanation stored in local IndexedDB.
+ * Deterministic irrigation calculation remains authoritative per safety invariants.
+ */
 export interface StoredInsight {
   id: string; plotId: string; date: string; summary: string; observations: string[]; language: string; generatedAt: string; label: string
 }
+
 
 export interface APIError { error: { code: string; message: string; field?: string } }
