@@ -378,7 +378,12 @@ export function AIChatAssistant({
     'Explain crop growth stage water needs'
   ]
 
+/**
+ * Deterministically generates grounded agronomic explanations from local recommendations
+ * when network is offline or AI server endpoint is disabled.
+ */
 function generateGroundedFallback(query: string, rec?: Recommendation, lang: 'en' | 'sw' = 'en'): string {
+
   if (!rec) {
     return lang === 'sw'
       ? 'Tafadhali chagua shamba kwenye dashibodi ili AI ionyeshe maelezo kulingana na vipimo vyako.'
