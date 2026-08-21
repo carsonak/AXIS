@@ -1,7 +1,29 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import type { ReactNode } from 'react'
+import { useState, useEffect, type ReactNode, type FormEvent } from 'react'
+import { createInsight, type InsightHistoryItem } from './api'
+import { repos } from './db'
+import type { Plot, Recommendation } from './types'
+import { dateDaysAgo } from './utils'
+
+
+
+
+export function NetworkStatusDot({ online }: { online: boolean }) {
+  return (
+    <div
+      className={`header-network-pill ${online ? 'online' : 'offline'}`}
+      title={online ? 'Online — Weather & AI active' : 'Offline — Showing saved local advice'}
+      role="status"
+    >
+      <span className="net-dot" />
+      <span className="net-label">{online ? 'Online' : 'Offline'}</span>
+    </div>
+  )
+}
+
 
 export function AxisMark({ compact = false }: { compact?: boolean }) {
+
   return (
     <NavLink to="/" className="brand-logo-link" style={{ textDecoration: 'none' }}>
       <div className="brand">
@@ -287,4 +309,296 @@ export function Alert({ tone = 'info', title, children }: { tone?: 'info' | 'war
     </div>
   )
 }
+
+export interface ChatMessage {
+  id: string
+  sender: 'user' | 'assistant'
+  text: string
+  time: string
+  label?: string
+}
+
+export function AIChatAssistant({
+  recommendation: initialRec,
+  history: initialHistory = [],
+  selectedPlot,
+  online,
+  aiEnabled = true
+}: {
+  recommendation?: Recommendation
+  history?: InsightHistoryItem[]
+  selectedPlot?: Plot
+  online: boolean
+  aiEnabled?: boolean
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [activeRec, setActiveRec] = useState<Recommendation | undefined>(initialRec)
+  const [historyItems, setHistoryItems] = useState<InsightHistoryItem[]>(initialHistory)
+
+  useEffect(() => {
+    if (initialRec) {
+      setActiveRec(initialRec)
+      return
+    }
+    if (!selectedPlot) return
+    let active = true
+    void (async () => {
+      const [rec, events] = await Promise.all([
+        repos.latestRecommendation(selectedPlot.id),
+        repos.eventsForPlot(selectedPlot.id, dateDaysAgo(7))
+
+      ])
+      if (active) {
+        if (rec) setActiveRec(rec)
+        setHistoryItems(events.map(e => ({ date: e.date, recommended_litres: e.recommendedLitres ?? 0, applied_litres: e.litres })))
+      }
+    })()
+    return () => { active = false }
+  }, [initialRec, selectedPlot?.id])
+
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: 'init-1',
+      sender: 'assistant',
+      text: activeRec
+        ? `Habari! I am your AXIS AI Assistant. Grounded in your deterministic advice (${activeRec.decision.litres} Litres for ${activeRec.crop_stage.display_name} stage). Ask me any question about your field!`
+        : 'Hello! I am your AXIS AI Assistant. Ask me any question about daily water demand, rainfall forecasts, or crop growth stages.',
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      label: 'AI-Generated Explanation'
+    }
+  ])
+
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [language, setLanguage] = useState<'en' | 'sw'>('en')
+
+  const suggestions = [
+    'Why did my water volume change today?',
+    'How did rain forecast affect my plot?',
+    'Explain crop growth stage water needs'
+  ]
+
+function generateGroundedFallback(query: string, rec?: Recommendation, lang: 'en' | 'sw' = 'en'): string {
+  if (!rec) {
+    return lang === 'sw'
+      ? 'Tafadhali chagua shamba kwenye dashibodi ili AI ionyeshe maelezo kulingana na vipimo vyako.'
+      : 'Please select an active plot on the dashboard so AXIS AI can ground its explanation in your exact plot data.'
+  }
+
+  const q = query.toLowerCase()
+  const litres = rec.decision.litres
+  const minutes = rec.decision.duration_minutes
+  const rainAvoided = rec.decision.rain_adjustment_litres ?? 0
+  const stage = rec.crop_stage.display_name
+  const age = rec.crop_stage.crop_age_days
+  const rainForecast = rec.weather.rain_next_24h_mm
+  const summary = rec.explanation.summary
+
+  if (q.includes('rain') || q.includes('mvua')) {
+    if (rainAvoided > 0) {
+      return lang === 'sw'
+        ? `Utabiri wa mvua ni mm ${rainForecast}. AXIS imehesabu mkopo wa mvua na kuokoa Lita ${rainAvoided.toLocaleString()} za maji ("Maji yaliyoepukwa kwa sababu mvua ilizingatiwa").`
+        : `Forecast rainfall is ${rainForecast} mm. AXIS credited the forecast rain and saved ${rainAvoided.toLocaleString()} Litres of water ("Water avoided because rain was considered").`
+    } else {
+      return lang === 'sw'
+        ? `Utabiri wa mvua ni mm ${rainForecast}. Mvua iko chini ya kizingiti, kwa hivyo unahitaji Lita ${litres.toLocaleString()} za maji leo.`
+        : `Forecast rainfall is ${rainForecast} mm, which is below the credit threshold. Full daily requirement of ${litres.toLocaleString()} Litres is prescribed.`
+    }
+  }
+
+  if (q.includes('change') || q.includes('volume') || q.includes('badiliko') || q.includes('kiwango') || q.includes('why')) {
+    return lang === 'sw'
+      ? `Pendekezo la leo ni Lita ${litres.toLocaleString()}${minutes ? ` (${minutes} min)` : ''} kwa hatua ya ${stage}. ${summary}`
+      : `Today's recommendation is ${litres.toLocaleString()} Litres${minutes ? ` (${minutes} min runtime)` : ''} for the ${stage} stage. ${summary}`
+  }
+
+  if (q.includes('stage') || q.includes('crop') || q.includes('hatua') || q.includes('mmea')) {
+    return lang === 'sw'
+      ? `Mmea wako uko katika hatua ya ${stage} (Siku ya ${age}). Mahitaji ya maji yanahesabiwa kulingana na uvukizaji wa siku na ufanisi wa mfumo.`
+      : `Your crop is currently in the ${stage} growth stage (Day ${age}). Daily water replacement is calculated using crop evapotranspiration.`
+  }
+
+  return lang === 'sw'
+    ? `${summary} Kipimo halisi cha leo ni Lita ${litres.toLocaleString()}.`
+    : `${summary} Prescribed application for today is ${litres.toLocaleString()} Litres.`
+}
+
+  async function handleSend(textToSend?: string) {
+    const query = (textToSend || input).trim()
+    if (!query || loading) return
+
+    const userMsg: ChatMessage = {
+      id: crypto.randomUUID(),
+      sender: 'user',
+      text: query,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
+
+    setMessages(prev => [...prev, userMsg])
+    if (!textToSend) setInput('')
+    setLoading(true)
+
+    try {
+      if (online && activeRec) {
+        try {
+          const response = await createInsight(activeRec, historyItems, language)
+          setMessages(prev => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              sender: 'assistant',
+              text: `${response.summary} ${response.observations.length > 0 ? ' • ' + response.observations.join(' ') : ''}`,
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              label: response.label || 'AI-Generated Explanation'
+            }
+          ])
+          return
+        } catch {
+          // Server AI endpoint disabled or offline -> fallback to grounded agronomic explanation
+        }
+      }
+
+      // Grounded Agronomic Fallback Explanation
+      const fallbackText = generateGroundedFallback(query, activeRec, language)
+      setMessages(prev => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          sender: 'assistant',
+          text: fallbackText,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          label: online ? 'AI-Generated Explanation' : 'Grounded Offline Summary'
+        }
+      ])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault()
+    void handleSend()
+  }
+
+  if (!isOpen) {
+    return (
+      <div className="ai-floating-trigger-container">
+        <button
+          type="button"
+          className="ai-chat-fab"
+          onClick={() => setIsOpen(true)}
+          aria-label="Ask AXIS AI Assistant"
+        >
+          <span className="fab-icon">🤖</span>
+          <span className="fab-label">Ask AXIS AI</span>
+          <span className={`fab-status-dot ${online ? 'online' : 'offline'}`} />
+        </button>
+      </div>
+    )
+  }
+
+
+  return (
+    <div className="ai-floating-overlay">
+      <Card className="ai-chat-card ai-chat-card-floating">
+        <div className="ai-chat-header">
+          <div className="ai-chat-title-group">
+            <div className="ai-icon-badge">🤖</div>
+            <div>
+              <h3>AXIS AI Assistant</h3>
+              <p className="ai-subtitle">Grounded agronomic Q&A</p>
+            </div>
+          </div>
+          <div className="ai-header-actions">
+            <div className="lang-toggle-mini">
+              <button
+                type="button"
+                className={`lang-btn ${language === 'en' ? 'active' : ''}`}
+                onClick={() => setLanguage('en')}
+              >
+                EN
+              </button>
+              <button
+                type="button"
+                className={`lang-btn ${language === 'sw' ? 'active' : ''}`}
+                onClick={() => setLanguage('sw')}
+              >
+                SW
+              </button>
+            </div>
+            <button
+              type="button"
+              className="ai-close-btn"
+              onClick={() => setIsOpen(false)}
+              aria-label="Close Assistant"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        {!online && (
+          <div className="offline-ai-banner">
+            <span>⚡ Network Offline — Connect to internet to ask live AI questions.</span>
+          </div>
+        )}
+
+        <div className="ai-chat-messages">
+          {messages.map(msg => (
+            <div key={msg.id} className={`ai-message-row ${msg.sender}`}>
+              <div className="ai-msg-bubble">
+                <p className="ai-msg-text">{msg.text}</p>
+                <div className="ai-msg-footer">
+                  <span className="ai-msg-time">{msg.time}</span>
+                  {msg.label && <span className="ai-msg-label">{msg.label}</span>}
+                </div>
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <div className="ai-message-row assistant">
+              <div className="ai-msg-bubble loading">
+                <span className="typing-dots">Generating explanation...</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="ai-suggest-chips">
+          <span className="chips-label">Quick Questions:</span>
+          {suggestions.map((chip, idx) => (
+            <button
+              key={idx}
+              type="button"
+              className="suggest-chip-btn"
+              disabled={loading || !online}
+              onClick={() => void handleSend(chip)}
+            >
+              💬 {chip}
+            </button>
+          ))}
+        </div>
+
+        <form className="ai-chat-input-row" onSubmit={onSubmit}>
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            placeholder={online ? 'Ask AXIS AI a question...' : 'Offline — connect to chat'}
+            disabled={loading || !online}
+          />
+          <button type="submit" className="button primary compact" disabled={loading || !online || !input.trim()}>
+            {loading ? 'Thinking...' : 'Send'}
+          </button>
+        </form>
+
+        <p className="ai-disclaimer-footer">
+          Deterministic advice is authoritative. AI explanations are non-binding summaries.
+        </p>
+      </Card>
+    </div>
+  )
+}
+
+
 
