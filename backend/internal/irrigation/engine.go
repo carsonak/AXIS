@@ -93,7 +93,10 @@ func Compute(req domain.RecommendationRequest, weather domain.WeatherSnapshot, c
 		grossDepth = 0
 	}
 	litres := roundLitres(litresExact)
-	rainAdjustment := math.Max(0, baselineLitres-litresExact)
+	rainAdjustment := 0.0
+	if rainReduced {
+		rainAdjustment = math.Max(0, baselineLitres-litresExact)
+	}
 
 	var duration *int
 	if plot.FlowRateLPM != nil && litresExact > 0 {

@@ -420,7 +420,7 @@ components:
         rain_adjustment_litres:
           type: number
           minimum: 0
-          description: max(0, no-rain baseline minus recommended litres); not a general water-saved claim.
+          description: max(0, no-rain baseline minus recommended litres) when forecast rain was credited; zero whenever no rain qualified, including sub-threshold SKIP days. Not a general water-saved claim.
         previous_recommendation_delta_litres:
           type: number
 
