@@ -1,19 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { createInsight, createRecommendation, type InsightHistoryItem } from '../api'
-import { Alert, AppHeader, AxisMark, Badge, Card, EmptyState, Modal, Page, Spinner } from '../components'
+import { Alert, Badge, Card, EmptyState, Modal, Page, Spinner, SketchCrop, SketchWaterDrop, SketchRain } from '../components'
+
 import { useAxis } from '../context'
 import { repos } from '../db'
 import { measuredLitres } from '../sensors'
 import type { IrrigationEvent, StoredInsight, StoredRecommendation } from '../types'
-import { formatLitres, formatWindow, freshness, friendlyDate, nairobiDate, recommendationChange } from '../utils'
-
-const stageOrder = ['establishing', 'developing', 'productive', 'maturing'] as const
+import { cropAgeDays, deriveStage, formatLitres, formatWindow, freshness, friendlyDate, nairobiDate, recommendationChange } from '../utils'
 
 export default function TodayPage() {
-  const { selectedPlot, catalog, online, health, settings } = useAxis()
+  const { selectedPlot, plots, catalog, online, health, settings } = useAxis()
+  const navigate = useNavigate()
   const [recommendation, setRecommendation] = useState<StoredRecommendation>()
   const [latestEvent, setLatestEvent] = useState<IrrigationEvent>()
+  const [localReady, setLocalReady] = useState(false)
+  const [weeklyWaterLitres, setWeeklyWaterLitres] = useState(0)
+  const [averageSoilMoisture, setAverageSoilMoisture] = useState<number>()
   const [insight, setInsight] = useState<StoredInsight>()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -21,12 +24,26 @@ export default function TodayPage() {
   const [showLog, setShowLog] = useState(false)
 
   const loadLocal = useCallback(async () => {
-    if (!selectedPlot) { setRecommendation(undefined); return }
-    const [rec, event, savedInsight] = await Promise.all([
-      repos.latestRecommendation(selectedPlot.id), repos.latestEvent(selectedPlot.id), repos.getInsight(selectedPlot.id, nairobiDate())
+    setLocalReady(false)
+    setRecommendation(undefined)
+    setLatestEvent(undefined)
+    setShowLog(false)
+    if (!selectedPlot) { setRecommendation(undefined); setLocalReady(true); return }
+    const [rec, event, savedInsight, plotEvents, sensorReadings] = await Promise.all([
+      repos.latestRecommendation(selectedPlot.id),
+      repos.latestEvent(selectedPlot.id),
+      repos.getInsight(selectedPlot.id, nairobiDate()),
+      Promise.all(plots.map(plot => repos.eventsForPlot(plot.id, dateSevenDaysAgo()))),
+      Promise.all(plots.map(plot => repos.latestSensorReading(plot.id)))
     ])
-    setRecommendation(rec); setLatestEvent(event); setInsight(savedInsight)
-  }, [selectedPlot?.id])
+    const readings = sensorReadings.filter(reading => reading !== undefined)
+    setRecommendation(rec)
+    setLatestEvent(event?.date === nairobiDate() ? event : undefined)
+    setInsight(savedInsight)
+    setWeeklyWaterLitres(plotEvents.flat().reduce((sum, item) => sum + item.litres, 0))
+    setAverageSoilMoisture(readings.length > 0 ? readings.reduce((sum, item) => sum + item.volumetricWaterContentPct, 0) / readings.length : undefined)
+    setLocalReady(true)
+  }, [selectedPlot?.id, plots])
 
   const refresh = useCallback(async () => {
     if (!selectedPlot || !online) return
@@ -44,16 +61,32 @@ export default function TodayPage() {
 
   useEffect(() => { void loadLocal() }, [loadLocal])
   useEffect(() => {
-    if (selectedPlot && online && recommendation?.date !== nairobiDate() && !loading) void refresh()
-  }, [selectedPlot?.id, online, recommendation?.date])
+    if (localReady && selectedPlot && online && recommendation && recommendation.date !== nairobiDate() && !loading) void refresh()
+  }, [localReady, selectedPlot?.id, online, recommendation?.date, loading, refresh])
 
-  if (!selectedPlot) return <Page><div className="top-brand"><AxisMark /></div><AppHeader eyebrow="Today" title="Your irrigation plan" /><EmptyState title="Set up your first plot" text="Add the crop, area, irrigation method, and location. AXIS will turn today’s weather into an explainable action." action={<Link className="button primary" to="/plots/new">Add a plot</Link>} /></Page>
+  if (!selectedPlot) return (
+    <Page>
+      <div className="top-brand-header">
+        <button className="icon-menu-btn" aria-label="Menu">☰</button>
+        <div className="brand-text-center">
+          <strong className="bold-brand">AXIS</strong>
+          <span className="brand-subtitle">Agricultural Excellence in Irrigation Schemes</span>
+        </div>
+        <Link to="/app/alerts" className="icon-button header-bell" aria-label="Alerts">
+          🔔
+        </Link>
+      </div>
+      <EmptyState
+        title="Set up your farm"
+        text="Add your crop, area, irrigation method, and location to receive precision recommendations."
+        action={<Link className="button primary" to="/app/plots/new">Add a plot</Link>}
+      />
+    </Page>
+  )
 
   const activePlot = selectedPlot
-  const crop = catalog?.crops.find(item => item.id === activePlot.cropId)
   const status = freshness(recommendation)
   const change = recommendation ? recommendationChange(recommendation) : undefined
-  const rainProbability = recommendation?.weather.rain_probability
 
   async function generateInsight() {
     if (!recommendation || !health?.ai_insights_enabled) return
@@ -72,52 +105,293 @@ export default function TodayPage() {
     finally { setLoading(false) }
   }
 
-  return <Page>
-    <div className="top-brand"><AxisMark /></div>
-    <AppHeader eyebrow="Today" title={selectedPlot.name} action={<button className="icon-button refresh" onClick={() => void refresh()} disabled={!online || loading} aria-label="Refresh recommendation">↻</button>} />
-    {!online && <Alert tone="warn" title="You’re offline">Saved advice and irrigation logging still work. Reconnect for new weather.</Alert>}
-    {error && <Alert tone="warn" title="Couldn’t refresh">{error}</Alert>}
-    {recommendation ? <>
-      <Card className={`hero ${recommendation.decision.action.toLowerCase()}`}>
-        <div className="hero-top"><Badge tone={recommendation.decision.action === 'SKIP' ? 'good' : recommendation.decision.action === 'REDUCED' ? 'info' : 'warn'}>{recommendation.decision.action === 'SKIP' ? 'Skip today' : recommendation.decision.action === 'REDUCED' ? 'Rain-adjusted' : 'Irrigate today'}</Badge><Badge tone={status.tone}>{status.label}</Badge></div>
-        <div className="droplet">◒</div>
-        <p className="hero-kicker">Estimated daily requirement</p>
-        <strong className="hero-number">{formatLitres(recommendation.decision.litres)}</strong>
-        {recommendation.decision.duration_minutes !== undefined && <p className="hero-duration">About <strong>{recommendation.decision.duration_minutes} minutes</strong> at {selectedPlot.flowRateLpm} L/min</p>}
-        <p className="hero-window">Best window · {formatWindow(recommendation.decision.recommended_window)}</p>
-        <div className="hero-actions"><button className="button primary" onClick={() => setShowLog(true)}>I irrigated</button><button className="button secondary" onClick={() => setShowWhy(true)}>Why this amount?</button></div>
+  // Calculate Farm Overview stats
+  const totalCropsCount = plots.length
+  const totalAcres = plots.reduce((sum, p) => sum + (p.areaM2 / 4046.8564224), 0).toFixed(1)
+
+  return (
+    <Page>
+      {/* Screen 1 Header: Hamburger Menu, AXIS brand, Bell with badge */}
+      <div className="top-dashboard-header">
+        <button className="icon-menu-btn" onClick={() => navigate('/app/more')} aria-label="Open menu">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+        <Link to="/" className="dash-brand-title" style={{ textDecoration: 'none' }}>
+          <strong className="bold-brand">AXIS</strong>
+          <span className="dash-brand-sub">Agricultural Excellence in Irrigation Schemes</span>
+        </Link>
+
+        <Link to="/app/alerts" className="dash-bell-btn" aria-label="View alerts">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+        </Link>
+      </div>
+
+      {/* Greeting & Location bar */}
+      <div className="greeting-row">
+        <div>
+          <h2 className="greeting-text">Hello, Farmer 👋</h2>
+          <p className="location-text">{activePlot.lat.toFixed(4)}, {activePlot.lon.toFixed(4)}</p>
+        </div>
+        <Link to="/app/weather" className="weather-pill-btn">
+          <span>☀️</span>
+          <strong>{recommendation ? `${Math.round(recommendation.weather.t_max_c)}°C` : 'Weather unavailable'}</strong>
+        </Link>
+      </div>
+
+      {!online && <Alert tone="warn" title="You’re offline">Saved advice and irrigation logging still work. Reconnect for new weather.</Alert>}
+      {error && <Alert tone="warn" title="Couldn’t refresh">{error}</Alert>}
+
+      {/* Today's Recommendation Card */}
+      <Card className="dashboard-rec-card">
+        <div className="rec-card-head">
+          <p className="eyebrow">Today's Recommendation</p>
+          <Badge tone={status.tone}>{status.label}</Badge>
+        </div>
+
+        {recommendation ? <Link to="/app/recommendations" className="rec-card-body">
+          <div className="rec-left-icon">
+            <div className="drop-circle">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="#ffffff">
+                <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+              </svg>
+            </div>
+          </div>
+          <div className="rec-content">
+            <h3 className="rec-action-title">
+              {recommendation.decision.action === 'SKIP' ? 'Skip Today' : recommendation.decision.action === 'REDUCED' ? 'Rain-Adjusted' : 'Irrigate Today'}
+            </h3>
+            <div className="rec-litres-big">{formatLitres(recommendation.decision.litres)}</div>
+            <p className="rec-time-sub">Best time: {formatWindow(recommendation.decision.recommended_window)}</p>
+          </div>
+          <div className="rec-chevron">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </div>
+        </Link> : (
+          <div className="rec-card-body">
+            <div className="rec-content">
+              <h3 className="rec-action-title">Weather is needed first</h3>
+              <p className="rec-time-sub">
+                {online ? 'Get today’s weather to calculate a deterministic recommendation.' : 'Reconnect once to obtain weather and generate your first recommendation.'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="rec-card-footer">
+          {recommendation ? (
+            <>
+              <button className="button primary compact" onClick={() => setShowLog(true)}>Log Irrigation</button>
+              <button className="button secondary compact" onClick={() => setShowWhy(true)}>Why this amount?</button>
+            </>
+          ) : (
+            <button className="button primary compact" disabled={!online || loading || !localReady} onClick={() => void refresh()}>
+              {loading ? 'Calculating…' : "Get today's advice"}
+            </button>
+          )}
+        </div>
       </Card>
 
-      <section className="metric-grid">
-        <Card><span className="metric-icon">☂</span><small>Expected rain</small><strong>{recommendation.weather.rain_next_24h_mm.toFixed(1)} mm</strong><span>{rainProbability !== undefined ? `${Math.round(rainProbability * 100)}% chance` : 'Probability unavailable'}</span></Card>
-        <Card><span className="metric-icon">☀</span><small>Temperature</small><strong>{Math.round(recommendation.weather.t_min_c)}–{Math.round(recommendation.weather.t_max_c)}°C</strong><span>{recommendation.weather.et0_method} ETo</span></Card>
-        <Card><span className="metric-icon">↘</span><small>Rain adjustment</small><strong>{formatLitres(recommendation.decision.rain_adjustment_litres)}</strong><span>Water avoided today</span></Card>
-      </section>
+      {/* Farm Overview Section */}
+      <div className="farm-overview-section">
+        <div className="section-head">
+          <h2>Farm Overview</h2>
+        </div>
+        <div className="overview-stats-grid">
+          <Link to="/app/plots" className="overview-stat-card">
+            <strong className="stat-num">{totalCropsCount}</strong>
+            <span className="stat-label">Crops</span>
+          </Link>
+          <Link to="/app/more" className="overview-stat-card">
+            <strong className="stat-num">{totalAcres} ac</strong>
+            <span className="stat-label">Farm Size</span>
+          </Link>
+          <Link to="/app/soil" className="overview-stat-card">
+            <strong className="stat-num">{averageSoilMoisture === undefined ? 'No readings yet' : `${Math.round(averageSoilMoisture)}%`}</strong>
+            <span className="stat-label">Avg. Soil Moisture</span>
+          </Link>
+          <Link to="/app/water" className="overview-stat-card wide-stat">
+            <strong className="stat-num">{weeklyWaterLitres > 0 ? formatLitres(weeklyWaterLitres) : 'No irrigation logged'}</strong>
+            <span className="stat-label">Water Used (Last 7 Days)</span>
+          </Link>
+        </div>
+      </div>
 
-      <Card className="growth-card">
-        <div className="section-head"><div><p className="eyebrow">Crop growth</p><h2>{crop?.display_name ?? selectedPlot.cropId}</h2></div><Badge tone="good">Day {recommendation.crop_stage.crop_age_days}</Badge></div>
-        <div className="stage-track">{stageOrder.map((stage, index) => { const current = stageOrder.indexOf(recommendation.crop_stage.id); return <div key={stage} className={index < current ? 'done' : index === current ? 'current' : ''}><span>{index < current ? '✓' : index + 1}</span><small>{stage === 'productive' ? 'Peak growth' : stage}</small></div> })}</div>
-        <p className="stage-summary"><strong>{recommendation.crop_stage.display_name}</strong> · Stage day {recommendation.crop_stage.stage_day}</p>
-      </Card>
+      {/* My Crops Section */}
+      <div className="my-crops-section">
+        <div className="section-head">
+          <h2>My Crops</h2>
+          <Link to="/app/plots" className="view-all-link">View all &gt;</Link>
+        </div>
 
-      {recommendation.decision.rain_adjustment_litres > 0 && <Alert tone="good" title="Rain is doing part of the work">AXIS reduced today’s application by {formatLitres(recommendation.decision.rain_adjustment_litres)} compared with the same calculation without forecast rain.</Alert>}
+        <div className="my-crops-list">
+          {plots.length > 0 ? (
+            plots.map(p => {
+              const c = catalog?.crops.find(item => item.id === p.cropId)
+              const age = cropAgeDays(p.plantingDate)
+              const stg = c ? deriveStage(c, age) : undefined
+              const stgName = catalog?.stages.find(item => item.id === stg?.id)?.display_name ?? 'Stage unavailable'
+              const pct = c ? Math.min(100, Math.round((age / c.total_days) * 100)) : 0
+
+              return (
+                <div key={p.id} className="crop-summary-row" onClick={() => navigate(`/app/plots/${p.id}/details`)}>
+                  <div className="crop-row-icon">
+                    <SketchCrop size={22} color="#1b5e20" />
+                  </div>
+                  <div className="crop-row-info">
+                    <strong>{p.name}</strong>
+                    <span className="crop-stage-text">{stgName}</span>
+                    <div className="crop-row-bar-track">
+                      <span className="crop-row-bar-fill" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                  <div className="crop-row-pct">{pct}%</div>
+                </div>
+              )
+            })
+          ) : <p>No crops added yet.</p>}
+        </div>
+      </div>
+
+      {recommendation && recommendation.decision.rain_adjustment_litres > 0 && (
+        <Alert tone="good" title="Rain is doing part of the work">
+          AXIS reduced today’s application by {formatLitres(recommendation.decision.rain_adjustment_litres)} compared with the same calculation without forecast rain.
+        </Alert>
+      )}
+
       {change && <Alert title="Changed since last advice">{change}. Open “Why?” to compare the calculation inputs.</Alert>}
-      {recommendation.sensor_context?.soil_moisture_connected && <Alert title="Soil reading available as context">{recommendation.sensor_context.reason ?? 'This preview reading does not change the deterministic recommendation.'}</Alert>}
-      {recommendation.warnings.map(warning => <Alert key={warning} tone="warn" title="Check this input">{warning}</Alert>)}
 
-      {latestEvent && <Card className="recent-event"><div><p className="eyebrow">Latest irrigation</p><h2>{formatLitres(latestEvent.litres)} recorded</h2><span>{friendlyDate(latestEvent.date)} · {latestEvent.source.replaceAll('_', ' ').toLowerCase()}</span></div><span className="event-check">✓</span></Card>}
+      {/* Dedicated Log Irrigation Card */}
+      {recommendation && <Card className="log-irrigation-card">
+        <div className="log-card-head">
+          <div>
+            <p className="eyebrow">Water Record</p>
+            <h2>Log Today's Irrigation</h2>
+          </div>
+          <Badge tone={latestEvent ? 'good' : 'warn'}>
+            {latestEvent ? '✓ Recorded Today' : 'Pending Log'}
+          </Badge>
+        </div>
 
-      {health?.ai_insights_enabled && <Card className="ai-card"><Badge tone="info">Bonus · AI insights</Badge><h2>Explain the pattern, not the litres</h2>{insight ? <><p>{insight.summary}</p><small>{insight.label}. The deterministic AXIS recommendation remains authoritative.</small></> : <><p>Ask AI to simplify today’s calculation and summarize up to seven days of your selected local history.</p><button className="button secondary" disabled={loading || !online} onClick={() => void generateInsight()}>Generate an insight</button></>}</Card>}
-    </> : <EmptyState title={loading ? 'Calculating today’s plan' : 'No saved recommendation yet'} text={online ? 'AXIS needs today’s weather to calculate the estimated irrigation requirement.' : 'Reconnect once to calculate and save advice for this plot.'} action={online ? <button className="button primary" disabled={loading} onClick={() => void refresh()}>{loading ? 'Calculating…' : 'Get today’s advice'}</button> : undefined} />}
-    {loading && recommendation && <Spinner label="Refreshing weather and advice…" />}
-    {showWhy && recommendation && <ExplanationModal recommendation={recommendation} onClose={() => setShowWhy(false)} />}
-    {showLog && recommendation && <IrrigationModal recommendation={recommendation} plotId={selectedPlot.id} onClose={() => setShowLog(false)} onSaved={event => { setLatestEvent(event); setShowLog(false) }} />}
-  </Page>
+        {latestEvent ? (
+          <div className="logged-event-body">
+            <div className="logged-stat-row">
+              <div className="logged-icon-circle">✓</div>
+              <div className="logged-details">
+                <strong>{formatLitres(latestEvent.litres)} Applied</strong>
+                <span>{friendlyDate(latestEvent.date)} · Source: {latestEvent.source.replaceAll('_', ' ').toLowerCase()}</span>
+              </div>
+            </div>
+            <div className="log-card-actions mt-3">
+              <button className="button secondary compact" onClick={() => setShowLog(true)}>
+                ✏️ Edit or Log Again
+              </button>
+              <Link to="/app/history" className="button ghost compact">
+                📜 View History &gt;
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div className="unlogged-event-body">
+            <p className="log-prompt-text">
+              Prescribed for today: <strong>{formatLitres(recommendation.decision.litres)}</strong>{recommendation.decision.duration_minutes !== undefined ? ` (${recommendation.decision.duration_minutes} min)` : ''}. Record actual applied volume to update your weekly water history.
+            </p>
+            <div className="log-card-actions">
+              <button className="button primary full" onClick={() => setShowLog(true)}>
+                💧 Log Applied Water
+              </button>
+            </div>
+          </div>
+        )}
+      </Card>}
+
+
+      {health?.ai_insights_enabled && (
+        <Card className="ai-card">
+          <Badge tone="info">Bonus · AI insights</Badge>
+          <h2>Explain the pattern, not the litres</h2>
+          {insight ? (
+            <>
+              <p>{insight.summary}</p>
+              <small>{insight.label}. The deterministic AXIS recommendation remains authoritative.</small>
+            </>
+          ) : (
+            <>
+              <p>Ask AI to simplify today’s calculation and summarize up to seven days of your selected local history.</p>
+              <button className="button secondary" disabled={loading || !online} onClick={() => void generateInsight()}>
+                Generate an insight
+              </button>
+            </>
+          )}
+        </Card>
+      )}
+
+      {loading && <Spinner label="Refreshing weather and advice…" />}
+      {showWhy && recommendation && <ExplanationModal recommendation={recommendation} onClose={() => setShowWhy(false)} />}
+      {showLog && recommendation && <IrrigationModal recommendation={recommendation} plotId={activePlot.id} onClose={() => setShowLog(false)} onSaved={event => { setLatestEvent(event); setWeeklyWaterLitres(value => value + event.litres); setShowLog(false) }} />}
+    </Page>
+  )
 }
 
 function ExplanationModal({ recommendation, onClose }: { recommendation: StoredRecommendation; onClose(): void }) {
-  return <Modal title="Why this amount?" onClose={onClose}><p className="modal-intro">{recommendation.explanation.summary}</p><div className="equation-list">{recommendation.explanation.steps.map((step, index) => <div key={step.key}><span>{index + 1}</span><div><strong>{step.label}</strong>{step.note && <small>{step.note}</small>}</div><b>{step.value.toLocaleString()} {step.unit}</b></div>)}</div>{recommendation.comparison && <div className="comparison-box"><p className="eyebrow">Why different?</p><strong>{recommendation.comparison.summary}</strong><ul>{recommendation.comparison.factors.filter(factor => factor.key !== 'litres').map(factor => <li key={factor.key}><span>{factor.label}</span><b>{factor.note ?? `${factor.change !== undefined && factor.change > 0 ? '+' : ''}${factor.change ?? ''} ${factor.unit ?? ''}`}</b></li>)}</ul></div>}<div className="confidence-box"><Badge tone={recommendation.confidence.level === 'LOW' ? 'warn' : recommendation.confidence.level === 'HIGH' ? 'good' : 'info'}>{recommendation.confidence.level} confidence</Badge><ul>{recommendation.confidence.reasons.map(reason => <li key={reason}>{reason}</li>)}</ul></div><p className="disclaimer">AXIS estimates daily replacement demand. It does not measure the field’s complete soil-water deficit unless a validated sensor adjustment is available.</p></Modal>
+  const rainAvoided = recommendation.decision.rain_adjustment_litres ?? 0
+
+  return (
+    <Modal title="Why this amount?" onClose={onClose}>
+      <div className="explanation-modal-body">
+        <div className="why-summary-card">
+          <div className="why-card-header">
+            <div className="why-header-icon">
+              <SketchWaterDrop size={22} color="#1b5e20" />
+            </div>
+            <div>
+              <strong>Agronomic Reason</strong>
+              <p className="modal-intro-text">{recommendation.explanation.summary}</p>
+            </div>
+          </div>
+        </div>
+
+        {rainAvoided > 0 && (
+          <div className="rain-avoided-callout">
+            <span className="rain-avoided-icon"><SketchRain size={22} color="#1b5e20" /></span>
+            <div>
+              <strong>Water avoided because rain was considered:</strong>
+              <span>Saved {formatLitres(rainAvoided)} due to forecast rainfall credit.</span>
+            </div>
+          </div>
+        )}
+
+        <div className="confidence-box">
+          <div className="confidence-head">
+            <Badge tone={recommendation.confidence.level === 'LOW' ? 'warn' : recommendation.confidence.level === 'HIGH' ? 'good' : 'info'}>
+              {recommendation.confidence.level} Confidence
+            </Badge>
+            <span className="confidence-sub">Weather & Agronomic Source Quality</span>
+          </div>
+          <ul className="confidence-reasons-list">
+            {recommendation.confidence.reasons.map(reason => (
+              <li key={reason}>• {reason}</li>
+            ))}
+          </ul>
+        </div>
+
+        <p className="disclaimer">
+          AXIS estimates daily crop-water replacement. It does not measure the field’s complete soil-water deficit unless a calibrated sensor adjustment has been locally validated.
+        </p>
+      </div>
+    </Modal>
+  )
 }
+
+
 
 function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recommendation: StoredRecommendation; plotId: string; onClose(): void; onSaved(event: IrrigationEvent): void }) {
   const [source, setSource] = useState<IrrigationEvent['source']>('FOLLOWED_RECOMMENDATION')
@@ -127,15 +401,119 @@ function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recomme
   const [meterEnd, setMeterEnd] = useState('')
   const [error, setError] = useState('')
 
+  const calculatedFlowMeterLitres = source === 'FLOW_METER' && Number.isFinite(Number(meterEnd) - Number(meterStart)) ? Math.max(0, Number(meterEnd) - Number(meterStart)) : 0
+  const activeAppliedVolume = source === 'FLOW_METER' ? calculatedFlowMeterLitres : (Number(litres) || 0)
+  const targetVolume = recommendation.decision.litres
+  const diffVolume = activeAppliedVolume - targetVolume
+
   async function save() {
     try {
+      if (source === 'FLOW_METER' && (!meterId.trim() || !meterStart.trim() || !meterEnd.trim())) throw new Error('Enter the meter identifier and both cumulative readings.')
+      if (source === 'MANUAL' && !litres.trim()) throw new Error('Enter the actual applied water volume.')
       const measured = source === 'FLOW_METER' ? measuredLitres({ meterId, observedAt: new Date().toISOString(), startLitres: Number(meterStart), endLitres: Number(meterEnd) }) : Number(litres)
-      if (!Number.isFinite(measured) || measured < 0) throw new Error('Enter a valid applied volume.')
-      const event: IrrigationEvent = { id: crypto.randomUUID(), plotId, date: nairobiDate(), litres: measured, recommendedLitres: recommendation.decision.litres_exact, source, createdAt: new Date().toISOString(), meterId: source === 'FLOW_METER' ? meterId : undefined, meterStartLitres: source === 'FLOW_METER' ? Number(meterStart) : undefined, meterEndLitres: source === 'FLOW_METER' ? Number(meterEnd) : undefined }
-      await repos.saveEvent(event); onSaved(event)
-    } catch (err) { setError(err instanceof Error ? err.message : 'Could not save irrigation.') }
+      if (!Number.isFinite(measured) || measured < 0) throw new Error('Enter a valid applied water volume in litres.')
+      const event: IrrigationEvent = {
+        id: crypto.randomUUID(),
+        plotId,
+        date: nairobiDate(),
+        litres: measured,
+        recommendedLitres: recommendation.decision.litres_exact,
+        source,
+        createdAt: new Date().toISOString(),
+        meterId: source === 'FLOW_METER' ? meterId : undefined,
+        meterStartLitres: source === 'FLOW_METER' ? Number(meterStart) : undefined,
+        meterEndLitres: source === 'FLOW_METER' ? Number(meterEnd) : undefined
+      }
+      await repos.saveEvent(event)
+      onSaved(event)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save irrigation record.')
+    }
   }
-  return <Modal title="Record irrigation" onClose={onClose}><p className="modal-intro">Confirm what was actually applied. This record stays on this device and works offline.</p><label>Measurement source<select value={source} onChange={event => setSource(event.target.value as IrrigationEvent['source'])}><option value="FOLLOWED_RECOMMENDATION">Followed AXIS recommendation</option><option value="MANUAL">Manual estimate</option><option value="FLOW_METER">Flow meter reading</option></select></label>{source === 'FLOW_METER' ? <div className="form-grid"><label className="wide">Meter identifier<input value={meterId} onChange={event => setMeterId(event.target.value)} placeholder="e.g. Pump meter 1" /></label><label>Start reading (L)<input inputMode="decimal" value={meterStart} onChange={event => setMeterStart(event.target.value)} /></label><label>End reading (L)<input inputMode="decimal" value={meterEnd} onChange={event => setMeterEnd(event.target.value)} /></label></div> : <label>Applied water (litres)<input inputMode="decimal" value={litres} onChange={event => setLitres(event.target.value)} /></label>}{error && <p className="field-error">{error}</p>}<button className="button primary full" onClick={() => void save()}>Save irrigation record</button></Modal>
+
+  return (
+    <Modal title="Log Irrigation Event 💧" onClose={onClose}>
+      <p className="modal-intro">Confirm the exact volume applied today. This record is saved directly to your device’s local IndexedDB.</p>
+
+      <div className="log-source-tabs">
+        <button
+          type="button"
+          className={`source-tab-btn ${source === 'FOLLOWED_RECOMMENDATION' ? 'active' : ''}`}
+          onClick={() => { setSource('FOLLOWED_RECOMMENDATION'); setLitres(String(recommendation.decision.litres)); }}
+        >
+          🎯 Followed Advice
+        </button>
+        <button
+          type="button"
+          className={`source-tab-btn ${source === 'FLOW_METER' ? 'active' : ''}`}
+          onClick={() => setSource('FLOW_METER')}
+        >
+          📟 Flow Meter
+        </button>
+        <button
+          type="button"
+          className={`source-tab-btn ${source === 'MANUAL' ? 'active' : ''}`}
+          onClick={() => { setSource('MANUAL'); setLitres('') }}
+        >
+          ✏️ Manual Volume
+        </button>
+      </div>
+
+      {source === 'FLOW_METER' ? (
+        <div className="flow-meter-form-box">
+          <div className="form-group">
+            <label htmlFor="meterId">Meter Identifier</label>
+            <input id="meterId" value={meterId} onChange={event => setMeterId(event.target.value)} placeholder="e.g. Drip Line Flow Meter 1" />
+          </div>
+          <div className="form-row-2col">
+            <div className="form-group">
+              <label htmlFor="meterStart">Start Reading (Litres)</label>
+              <input id="meterStart" inputMode="decimal" value={meterStart} onChange={event => setMeterStart(event.target.value)} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="meterEnd">End Reading (Litres)</label>
+              <input id="meterEnd" inputMode="decimal" value={meterEnd} onChange={event => setMeterEnd(event.target.value)} />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="manual-volume-box">
+          <div className="form-group">
+            <label htmlFor="appliedWater">Applied Water (Litres)</label>
+            <input id="appliedWater" inputMode="decimal" value={litres} onChange={event => setLitres(event.target.value)} />
+          </div>
+        </div>
+      )}
+
+      {/* Applied vs Prescribed Live Preview Box */}
+      <div className="log-volume-preview-banner">
+        <div className="preview-stat-col">
+          <span className="preview-label">Applied Volume</span>
+          <strong className="preview-val-applied">{formatLitres(activeAppliedVolume)}</strong>
+        </div>
+        <div className="preview-divider" />
+        <div className="preview-stat-col">
+          <span className="preview-label">Prescribed Target</span>
+          <strong className="preview-val-target">{formatLitres(targetVolume)}</strong>
+        </div>
+        <div className="preview-divider" />
+        <div className="preview-stat-col">
+          <span className="preview-label">Variance</span>
+          <strong className={`preview-val-diff ${diffVolume === 0 ? 'good' : diffVolume > 0 ? 'over' : 'under'}`}>
+            {diffVolume === 0 ? 'Exact match' : `${diffVolume > 0 ? '+' : ''}${diffVolume} L`}
+          </strong>
+        </div>
+      </div>
+
+      <div className="offline-notice-badge">
+        <span>🔒 100% Offline-First Record</span>
+      </div>
+
+      {error && <p className="field-error">{error}</p>}
+      <button className="button primary full" onClick={() => void save()}>Save Irrigation Record</button>
+    </Modal>
+  )
 }
+
 
 function dateSevenDaysAgo() { const date = new Date(); date.setDate(date.getDate() - 6); return nairobiDate(date) }

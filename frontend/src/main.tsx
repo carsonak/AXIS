@@ -4,10 +4,17 @@ import { BrowserRouter } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
 import { AxisProvider } from './context'
 import App from './App'
+import './App.css'
 import './styles.css'
 
 registerSW({ immediate: true })
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode><BrowserRouter><AxisProvider><App /></AxisProvider></BrowserRouter></StrictMode>
+  <StrictMode>
+    <BrowserRouter>
+      <AxisProvider>
+        <App />
+      </AxisProvider>
+    </BrowserRouter>
+  </StrictMode>
 )
