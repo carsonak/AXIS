@@ -35,7 +35,7 @@ IndexedDB already satisfies the important demo requirements: plot details persis
 | Container | OCI `Containerfile`, built locally with Podman | Rootless local workflow, no Docker daemon/sudo issues. |
 | Deployment | Fly.io, one service | HTTPS and one URL; no volume/database needed. |
 | Tests | Go stdlib + frontend typecheck/build | Spend test budget on calculations and contracts, not infrastructure. |
-| CI | None | Local `make check` before merge; avoids workflow/debug overhead. |
+| CI | GitHub Actions + Mise | Runs Go tests/vet and the frontend typecheck/build on pull requests and pushes to `main`. |
 
 ## 3. Domain contract
 
@@ -288,7 +288,7 @@ For P0, use the `/water` endpoint, not `/land`, because `/water` is directly ali
 ```text
 axis/
 ├── README.md
-├── Makefile
+├── mise.toml
 ├── Containerfile                 # M5
 ├── fly.toml                      # M5
 ├── openapi.yaml                  # M5, frozen H1
@@ -324,11 +324,11 @@ axis/
 
 ## 8. Git/integration strategy
 
-No CI.
+GitHub Actions runs the repository-wide Mise check for pull requests and pushes to `main`.
 
 - `main` must always be runnable; Member 5 is accountable.
 - Use branches lasting **60–90 minutes**, not day-long feature branches.
-- Before merge: `make check` locally = Go tests + Go vet + TS typecheck + frontend build.
+- Before merge: `mise run check` locally = Go tests + Go vet + TS typecheck + frontend build.
 - Squash merge or fast-forward after a quick human diff.
 - Shared contract files (`openapi.yaml`, `backend/internal/domain`, `fixtures/`) require Member 5 approval after H1.
 - Every AI-agent prompt begins: **“Only modify files under the ownership path I give you. If another file is required, stop and report it.”**

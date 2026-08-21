@@ -76,7 +76,7 @@ Only interface signatures, never another member's completed implementation. Stub
 
 **Fallback work if blocked**
 
-Request validation, HTTP tests, Makefile targets, server-side panic recovery, debug logs.
+Request validation, HTTP tests, Mise tasks, server-side panic recovery, debug logs.
 
 **Good AI-agent work**
 
@@ -242,12 +242,12 @@ HTTP client boilerplate, fixture parser tests, cache wrapper, Containerfile, fet
 | Real API → device | M4+M5 | [INT] | deployed backend |
 | Full phone demo | All | [INT] | above integrations |
 
-# Merge discipline without CI
+# Merge discipline with CI
 
-Before any merge to `main`, the author runs:
+CI runs the repository checks for pull requests and pushes to `main`. Before any merge, the author also runs:
 
 ```bash
-make check
+mise run check
 ```
 
 which should do approximately:

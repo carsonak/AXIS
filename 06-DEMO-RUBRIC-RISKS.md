@@ -164,7 +164,7 @@ Do not start AI or a calibrated sensor adjuster unless **all** are true by **15:
 
 1. P0 checklist is green on deployed phone.
 2. Airplane-mode reopen has worked twice.
-3. `make check` passes on `main`.
+3. `mise run check` passes on `main`.
 4. Offline irrigation recording and seven-day history are working.
 5. Real Kijani and fallback modes both work.
 6. At least two P1 items are working.
