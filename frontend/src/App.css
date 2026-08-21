@@ -1430,6 +1430,38 @@ body, html, #root {
   margin-bottom: 12px;
 }
 
+.refresh-status-row,
+.weather-refresh-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.refresh-status-row {
+  margin-bottom: 10px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.weather-refresh-card > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.weather-refresh-card span,
+.weather-refresh-card small {
+  color: var(--text-muted);
+}
+
+@media (max-width: 460px) {
+  .weather-refresh-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 .rec-card-body {
   display: flex;
   align-items: center;

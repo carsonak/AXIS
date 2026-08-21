@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,10 +11,20 @@ import (
 
 	axisassets "axis"
 	"axis/backend/internal/catalog"
+	"axis/backend/internal/domain"
 	"axis/backend/internal/insights"
 	"axis/backend/internal/weather"
 	"axis/backend/web"
 )
+
+type recordingWeatherProvider struct {
+	requestedAt time.Time
+}
+
+func (p *recordingWeatherProvider) Daily(_ context.Context, _, _ float64, requestedAt time.Time) (domain.WeatherSnapshot, error) {
+	p.requestedAt = requestedAt
+	return domain.WeatherSnapshot{Source: "KIJANISPACE", TMinC: 17.4, TMaxC: 28.8, RainNext24HMM: 0}, nil
+}
 
 func testServer(t *testing.T) *Server {
 	t.Helper()
@@ -63,6 +74,26 @@ func TestRecommendationContract(t *testing.T) {
 		if _, ok := decision[key]; !ok {
 			t.Errorf("decision missing %s", key)
 		}
+	}
+}
+
+func TestLiveRecommendationUsesCurrentNairobiTimeForWeather(t *testing.T) {
+	provider := &recordingWeatherProvider{}
+	server := testServer(t)
+	server.Weather = provider
+	server.WeatherMode = "live"
+
+	input := map[string]any{"date": "2026-08-20", "plot": map[string]any{"id": "plot-1", "name": "Tomato plot", "lat": -0.0917, "lon": 34.768, "area_m2": 1011.714, "crop_id": "tomato", "planting_date": "2026-06-07", "planting_date_estimated": false, "irrigation_method_id": "drip", "flow_rate_lpm": 45}}
+	body, _ := json.Marshal(input)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/recommendations", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	_, offset := provider.requestedAt.Zone()
+	if provider.requestedAt.Hour() != 18 || provider.requestedAt.Minute() != 10 || offset != 3*60*60 {
+		t.Fatalf("weather requested at %s, want 18:10 UTC+03:00", provider.requestedAt)
 	}
 }
 

@@ -1,8 +1,8 @@
 # Irrigation Engine and Uniform Crop-Stage Model
 
-Owner: **Member 3**. The engine is pure, deterministic, and contains no HTTP/database/network code.
+The engine is pure, deterministic, and contains no HTTP/database/network code. Historical ownership is recorded in `03-MEMBER-WORKSTREAMS.md`.
 
-## Current progress — 20 August 2026
+## Current implementation
 
 - ✅ Catalog validation, one-based stage derivation and boundaries, Kc interpolation, Hargreaves ETo, rain thresholds, efficiency, unit conversion, duration, rounding, SKIP behavior, confidence, deterministic comparisons, and rain-adjustment baselines are implemented and tested.
 - ✅ The golden recommendation fixture is exercised by the engine test suite.
@@ -67,23 +67,12 @@ Boundary convention must be tested and used consistently across all crops.
 ## 2. Engine interface
 
 ```go
-type Input struct {
-    Plot struct {
-        ID                    string
-        Name                  string
-        Lat, Lon              float64
-        AreaM2                float64
-        CropID                string
-        PlantingDate          domain.Date
-        PlantingDateEstimated bool
-        IrrigationMethodID    string
-        FlowRateLPM           *float64
-    }
-    Weather domain.WeatherSnapshot
-    Date    domain.Date
-}
-
-func Compute(in Input, catalog domain.Catalog) (domain.IrrigationRecommendation, error)
+func Compute(
+    req domain.RecommendationRequest,
+    weather domain.WeatherSnapshot,
+    catalog domain.Catalog,
+    generatedAt time.Time,
+) (domain.IrrigationRecommendation, error)
 ```
 
 No `time.Now()` inside `Compute`; date is an input.
@@ -117,7 +106,7 @@ This preserves FAO-56 stage behavior while presenting simpler stage names.
 
 ### Step 3 — reference ETo
 
-If a real Kijani field is conclusively identified as daily reference ETo with compatible units, the adapter may pass it through and mark method `PROVIDER`.
+Kijani `potentialevapotranspiration` hourly values are summed over the selected rolling forecast window and passed through as ET₀ with method `PROVIDER` when the result is within the engine's plausible range.
 
 Otherwise P0 uses Hargreaves:
 
@@ -259,7 +248,7 @@ Confidence is not a statistical probability. It is a transparent data-quality la
 ## 6. P0 validation
 
 - area `(0, 100000]` m²
-- latitude/longitude within the supported Kijani/Lake Victoria deployment footprint for the demo; UI may still store another location but server should report unsupported-provider bounds clearly
+- latitude in `[-90,90]` and longitude in `[-180,180]`; provider availability is handled by the weather fallback chain
 - crop exists
 - irrigation method exists
 - efficiency `(0,1]`
@@ -314,6 +303,6 @@ At minimum:
 
 The clean extension is an `Adjuster` chain after net requirement is calculated. A soil-moisture sensor or farmer feedback can later modify the modeled deficit without changing the weather adapter or crop-stage logic.
 
-The request contract accepts an optional timestamped volumetric soil-moisture observation. Stale readings are rejected for adjustment, and calibrated readings require field capacity, wilting point and root-zone depth. In the hackathon build the calibrated adjuster remains preview-only until agronomically validated, so a sensor can never silently corrupt the deterministic litres value.
+The request contract accepts an optional timestamped volumetric soil-moisture observation. Stale readings are rejected for adjustment, and calibrated readings require field capacity, wilting point and root-zone depth. The calibrated adjuster remains preview-only until agronomically validated, so a sensor can never silently alter the deterministic litres value.
 
 Flow meters do not belong in `Compute`: they measure actual applied water after the recommendation. Device-local irrigation events may store cumulative start/end readings and use their difference as the authoritative applied volume.
