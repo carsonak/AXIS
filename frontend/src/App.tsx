@@ -1,6 +1,8 @@
 import { Routes, Route, Outlet, Navigate } from 'react-router-dom';
-import { BottomNav, Spinner } from './components';
+import { BottomNav, Spinner, AIChatAssistant, NetworkStatusDot } from './components';
 import { useAxis } from './context';
+
+
 import LandingPage from './pages/LandingPage';
 import TodayPage from './pages/TodayPage';
 import PlotsPage from './pages/PlotsPage';
@@ -48,17 +50,18 @@ export default function App() {
 }
 
 function AppLayout() {
-  const { online } = useAxis()
+  const { online, selectedPlot, health } = useAxis()
 
   return (
     <div className="axis-app">
-      <div className={`network-strip ${online ? 'online' : 'offline'}`} role="status">
-        {online ? 'Online — weather can refresh' : 'Offline — showing saved advice'}
-      </div>
       <main className="app-main">
         <Outlet />
       </main>
+      <NetworkStatusDot online={online} />
+      <AIChatAssistant selectedPlot={selectedPlot} online={online} aiEnabled={health?.ai_insights_enabled} />
       <BottomNav />
     </div>
   );
 }
+
+
