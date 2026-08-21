@@ -1,11 +1,10 @@
 # Architecture and Frozen Contracts
 
-## Current progress — 20 August 2026
+## Current progress — 21 August 2026
 
-- ✅ The OpenAPI shapes, Go domain types, crop catalog, deterministic recommendation handler, errors, weather-source normalization, and optional insights boundary are implemented and covered by automated tests.
+- ✅ The OpenAPI shapes, Go domain types, crop catalog, deterministic recommendation handler, errors, weather-source normalization, container build/runtime smoke tests, and live KijaniSpace authenticated integration are complete and covered by automated tests.
 - ✅ Farmer persistence remains device-local; the Go backend is stateless for plots, recommendations, events, sensors, and insights.
 - 🟡 Static PWA serving works in automated handler tests and production builds, but the deployed HTTPS path has not been verified.
-- 🟡 The Kijani contract is implemented defensively because the supplied success payload is untyped; real authenticated schema confirmation remains pending.
 - ⛔ Soil-humidity input is returned as context only. AI is disabled unless every server-side feature flag and provider setting is present.
 
 ## 1. Recommended MVP architecture
@@ -262,19 +261,15 @@ AXIS_WEATHER_MODE=fixture
 
 short-circuits to a pinned fixture before any network call.
 
-### KijaniSpace facts verified from the current OpenAPI spec
+### KijaniSpace facts verified from the live API
 
 Use:
 
 ```text
-GET /v1/agro_climate/water?lat=<lat>&lon=<lon>
+GET /v1/agro_climate/land?lat=<lat>&lon=<lon>
 ```
 
-The endpoint is described as one forecast day of water-relevant temperature, windspeed, and precipitation data. The spec currently gives the 200 response an empty/untyped schema, so **do not present provisional aliases as verified field names**. The adapter now exists, but Member 5 must capture a real authenticated response, confirm units, and add a regression fixture before live use is considered complete.
-
-The spec advertises Bearer, API-key header/query, and HTTP Basic security alternatives. Obtain/verify whichever credential the organizers provide during the first hour.
-
-For P0, use the `/water` endpoint, not `/land`, because `/water` is directly aligned with this calculation and has fewer fields to interpret.
+The live endpoint serves 5-day hourly weather and agro-climatic forecasts. The adapter extracts and aggregates the next 24-hour window (indices 0–23) for daily irrigation calculations. Supported authentication includes HTTP Basic (`admin:secret` / `YWRtaW46c2VjcmV0`), Bearer tokens, and `X-API-Key`. A sanitized live payload for Kisumu (`-0.0917`, `34.7680`) is committed as `fixtures/weather/kisumu-live.json` and covered by parser regression tests. Note: The `/water` endpoint is reserved for water bodies and rejects land coordinates with `400 {"detail":"not water"}`.
 
 ## 6. Bonus integration boundaries
 

@@ -2,6 +2,7 @@ package weather
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -20,6 +21,39 @@ func TestFlexibleKijaniMapping(t *testing.T) {
 	}
 	if value.RainProbability == nil || *value.RainProbability != .55 {
 		t.Fatalf("bad probability: %+v", value.RainProbability)
+	}
+}
+
+func TestRealKijaniLivePayloadMapping(t *testing.T) {
+	b, err := axisassets.Files.ReadFile("fixtures/weather/kisumu-live.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw any
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatal(err)
+	}
+	value, err := mapKijani(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.Source != "KIJANISPACE" {
+		t.Fatalf("unexpected source: %s", value.Source)
+	}
+	if value.TMinC < 15 || value.TMinC > 25 {
+		t.Fatalf("tMin out of expected range: %f", value.TMinC)
+	}
+	if value.TMaxC < 25 || value.TMaxC > 35 {
+		t.Fatalf("tMax out of expected range: %f", value.TMaxC)
+	}
+	if value.RainProbability == nil || *value.RainProbability < 0 || *value.RainProbability > 1 {
+		t.Fatalf("bad rain probability: %+v", value.RainProbability)
+	}
+	if value.ET0MM == nil || *value.ET0MM <= 0 {
+		t.Fatalf("bad et0: %+v", value.ET0MM)
+	}
+	if value.WindMS == nil || *value.WindMS <= 0 {
+		t.Fatalf("bad wind: %+v", value.WindMS)
 	}
 }
 

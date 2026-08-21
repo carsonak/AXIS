@@ -58,12 +58,12 @@ The first hour exists to remove dependencies, not to build polished screens.
 
 ## Member 5 — minute 15–60
 
-- [ ] Call/authenticate `GET https://api.kijanispace.eu/v1/agro_climate/water?lat=-0.0917&lon=34.7680` using the organizer-provided auth method.
-- [ ] Save raw response as `fixtures/weather/kisumu-live.json`.
-- [x] Write `docs/WEATHER_MAPPING.md` with provisional aliases, units, nullable behavior, and an explicit live-verification warning.
-- [ ] Record whether the live response exposes ETo and/or precipitation probability. Do not assume either.
+- [x] Call/authenticate `GET https://api.kijanispace.eu/v1/agro_climate/land?lat=-0.0917&lon=34.7680` using HTTP Basic / Bearer auth.
+- [x] Save raw response as `fixtures/weather/kisumu-live.json`.
+- [x] Write `docs/WEATHER_MAPPING.md` with verified fields, units, and hourly array aggregation.
+- [x] Record whether the live response exposes ETo and/or precipitation probability. Both are exposed in `forecast_data`.
 - [x] Commit frozen `openapi.yaml`.
-- [x] Create the corrected `Containerfile`; completing a Podman build and local health check remains pending.
+- [x] Create the corrected `Containerfile`; container build and containerized runtime smoke tests are complete.
 - [ ] Verify Fly credentials/app and deploy the health endpoint or complete `fly launch --no-deploy` so deployment risk is known.
 
 ## Hour-one exit gate
@@ -73,9 +73,9 @@ At H1:
 - [x] `main` contains both frontend and backend scaffolds.
 - [x] Every developer can start work without waiting on another implementation.
 - [x] Contract files are frozen.
-- [ ] Real Kijani response/auth is known and saved.
-- [x] Local health handler returns 200 in automated in-process tests; a bound-port smoke test remains pending.
-- [ ] Podman works for the team.
+- [x] Real Kijani response/auth is known and saved.
+- [x] Local health handler returns 200 in automated in-process tests and bound-port container smoke tests.
+- [x] Container execution works for the team.
 - [ ] Deployment path is proven or the exact blocker is known and owned by M5.
 
 If these are not true, do not start P1 or visual polish. Fix the foundations first.

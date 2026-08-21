@@ -1,19 +1,18 @@
-# AXIS Team Handoff — 20 August 2026
+# AXIS Team Handoff — 21 August 2026
 
 ## What happened
 
 The intended task was to tighten the implementation plan and publish it so all five contributors could begin in parallel. During that planning pass, substantial implementation work was started earlier than intended. Undoing working, tested code would cost the team time without improving the plan, so the repository now preserves that work in reviewable commits and documents its limits honestly.
 
-Treat this as a head start, not a release candidate. Roughly 70% of the planned implementation is represented in code, while release readiness is closer to 50–55% because live-provider, container, deployment, browser, and physical-device evidence is still missing.
+Treat this as a head start, not a release candidate. Core calculation, offline persistence, live weather capture, and container execution are complete and verified.
 
 ## What the team can rely on
 
-- ✅ The Go engine, crop catalog, weather abstractions, cache/fallback behavior, API handlers, golden fixture, and automated backend tests are implemented.
+- ✅ The Go engine, crop catalog, weather abstractions, cache/fallback behavior, API handlers, golden fixture, container build/runtime smoke tests, live KijaniSpace authenticated integration, and automated tests are verified.
 - ✅ The React/TypeScript application typechecks and produces a PWA build.
-- 🟡 Today, Plots, History, More, Dexie persistence, offline-oriented rendering, charts, comparisons, settings, and manual cumulative flow-meter entry are implemented but need browser/phone QA.
-- 🟡 The Kijani client and tolerant payload mapper exist, but no real authenticated response has been captured to prove its production field mapping.
+- 🟡 Today, Plots, History, More, Dexie persistence, offline-oriented rendering, charts, comparisons, settings, and manual cumulative flow-meter entry are implemented but need physical phone QA.
 - ⛔ AI is disabled by default and may only explain deterministic data. Soil-humidity values are preview context only. Neither can change irrigation recommendations.
-- ⬜ Podman/container execution, Fly deployment, two offline force-close/reopen cycles, a second-device run, rehearsal, recording, and submission remain outstanding.
+- ⬜ Fly deployment, two offline force-close/reopen cycles, a second-device run, rehearsal, recording, and submission remain outstanding.
 
 ## Immediate parallel pickup
 

@@ -184,7 +184,7 @@ Dexie repositories, hooks, date/freshness helpers, local history, PWA manifest b
 
 `backend/internal/weather`, `frontend/src/api.ts`, `fixtures`, `openapi.yaml`, `Containerfile`, the planned `fly.toml`, integration docs and `main` health.
 
-**Progress — 20 August 2026:** ✅ The provider abstraction, fixture, climatology, three-second Kijani client, one-hour memory cache, API client, and parser tests are implemented. 🟡 The container recipe is prepared but not run to completion. ⬜ Real Kijani capture, `fly.toml`, Fly deployment, and physical integration remain pending. ⛔ The AI adapter exists only as a disabled bonus scaffold.
+**Progress — 21 August 2026:** ✅ The provider abstraction, fixture, climatology, three-second Kijani client, one-hour memory cache, API client, live KijaniSpace authenticated capture and parser tests, and container build/runtime execution are verified. ⬜ `fly.toml`, Fly deployment, and physical integration remain pending. ⛔ The AI adapter exists only as a disabled bonus scaffold.
 
 **P0 deliverables**
 

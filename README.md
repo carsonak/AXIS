@@ -2,18 +2,18 @@
 
 **Agricultural Excellence in Irrigation Schemes** is an offline-friendly PWA that turns crop age, plot area, irrigation method and weather into an explainable estimated daily irrigation requirement.
 
-## Handoff status — 20 August 2026
+## Handoff status — 21 August 2026
 
 | Status | Meaning |
 |---|---|
 | ✅ Complete | Implemented and verified by automated checks. |
-| 🟡 Verification pending | Implemented but not yet proven against the live service, browser, container, or physical phone. |
+| 🟡 Verification pending | Implemented but not yet proven against the live browser or physical phone. |
 | ⬜ Pending | Not implemented or tested. |
 | ⛔ Gated | Deliberately disabled until its acceptance gate passes. |
 
-- ✅ The deterministic backend, contracts, fixtures, tests, frontend typecheck, and production PWA build are working.
-- 🟡 The rich Today/Plots/History/More journey, IndexedDB persistence, offline shell, P1 polish, and Kijani adapter are implemented but still require live browser/device/provider validation.
-- ⬜ Container execution, Fly deployment, real Kijani capture, two physical-phone offline cycles, second-device testing, and demo rehearsal remain release blockers.
+- ✅ The deterministic backend, contracts, fixtures, tests, frontend typecheck, production PWA build, container build/runtime smoke tests, and authenticated live KijaniSpace capture/adapter are verified.
+- 🟡 The rich Today/Plots/History/More journey, IndexedDB persistence, offline shell, and P1 polish are implemented and require physical phone QA.
+- ⬜ Fly deployment, two physical-phone offline cycles, second-device testing, and demo rehearsal remain release blockers.
 - ⛔ AI is disabled by default, soil humidity is context-only, and automatic sensor/flow-meter hardware ingestion is not implemented.
 
 See [`docs/TEAM-HANDOFF.md`](docs/TEAM-HANDOFF.md) for the team pickup brief and ownership map.
@@ -69,7 +69,64 @@ export AXIS_AI_MODEL=replace-me
 ```
 
 The feature remains hidden when any configuration is missing. Provider failure never affects the native calculation or explanation.
+Overview
+In this project, you will create a function capable of merging multiple objects intelligently based on the type of each value. Rather than simply replacing properties, this function will combine arrays, concatenate strings, add numbers, and recursively merge objects, depending on their types.
 
+Role Play
+You’re designing a configuration system that must merge multiple data sources — user settings, default settings, and system configurations. These sources may contain arrays, strings, numbers, or nested objects. To ensure smooth integration, you’ll build a flexible fusion() function that combines all these inputs intelligently while respecting their data types.
+
+Learning Objective
+By completing this project, you will learn how to:
+
+Traverse and manipulate objects recursively.
+
+Handle type-based logic for merging different data types.
+
+Combine and transform arrays, strings, numbers, and nested objects.
+
+Apply robust conditional logic to manage type mismatches.
+
+Instructions
+General
+Create a function named fusion that merges objects into a new one according to their value types.
+
+Arrays
+If both values are arrays, concatenate them.
+
+fusion({ arr: [1, "2"] }, { arr: [2] });
+// -> { arr: [1, "2", 2] }
+
+fusion(
+  { arr: [], arr1: [5] },
+  { arr: [10, 3], arr1: [15, 3], arr2: ["7", "1"] },
+);
+// -> { arr: [10, 3], arr1: [5, 15, 3], arr2: ["7", "1"] }
+Strings
+If both values are strings, concatenate them with a space between them.
+
+fusion({ str: "salem" }, { str: "alem" });
+// -> { str: "salem alem" }
+
+fusion({ str: "salem" }, { str: "" });
+// -> { str: "salem " }
+Numbers
+If both values are numbers, add them.
+
+fusion({ a: 10, b: 8, c: 1 }, { a: 10, b: 2 });
+// -> { a: 20, b: 10, c: 1 }
+Objects
+If both values are objects, merge them recursively.
+
+fusion({ a: 1, b: { c: "Salem" } }, { a: 10, x: [], b: { c: "alem" } });
+// -> { a: 11, x: [], b: { c: "Salem alem" } }
+
+fusion({ a: { b: [3, 2], c: { d: 8 } } }, { a: { b: [0, 3, 1], c: { d: 3 } } });
+// -> { a: { b: [3, 2, 0, 3, 1], c: { d: 11 } } }
+Type Mismatch
+If the two values have different types, use the value from the second object.
+
+fusion({ a: "hello", b: [] }, { a: 4 });
+// -> { a: 4, b: [] }
 ## Verification
 
 ```bash
