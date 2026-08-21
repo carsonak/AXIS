@@ -1,17 +1,17 @@
 # Architecture and Frozen Contracts
 
-## Current progress — 21 August 2026
+## Current implementation
 
 - ✅ The OpenAPI shapes, Go domain types, crop catalog, deterministic recommendation handler, errors, weather-source normalization, container build/runtime smoke tests, and live KijaniSpace authenticated integration are complete and covered by automated tests.
 - ✅ Farmer persistence remains device-local; the Go backend is stateless for plots, recommendations, events, sensors, and insights.
-- 🟡 Static PWA serving works in automated handler tests and production builds, but the deployed HTTPS path has not been verified.
+- 🟡 Static PWA serving works in automated handler tests and production builds; browser, physical-device, and deployed HTTPS behavior remain separate manual checks.
 - ⛔ Soil-humidity input is returned as context only. AI is disabled unless every server-side feature flag and provider setting is present.
 
 ## 1. Recommended MVP architecture
 
 AXIS is a **local-first PWA with a stateless Go calculation/weather service**.
 
-The device is the system of record for hackathon data. The backend does not know who the farmer is and stores no plots or irrigation events. This sharply reduces deployment and integration risk while preserving the judged user experience.
+The device is the system of record for farmer data. The backend does not know who the farmer is and stores no plots or irrigation events. This reduces deployment and data-governance risk while preserving offline use.
 
 ### Why this is the right scope for 24 productive hours
 
@@ -38,7 +38,7 @@ IndexedDB already satisfies the important demo requirements: plot details persis
 
 ## 3. Domain contract
 
-These concepts are frozen at H1.
+These are the current domain concepts. Change them only through a synchronized contract update.
 
 ### Device-only `Plot`
 
@@ -241,7 +241,7 @@ KijaniSpace downtime should **not** normally cause a 5xx; it should fall back an
 
 ```go
 type Provider interface {
-    Daily(ctx context.Context, lat, lon float64, date domain.Date) (domain.WeatherSnapshot, error)
+    Daily(ctx context.Context, lat, lon float64, requestedAt time.Time) (domain.WeatherSnapshot, error)
 }
 ```
 
@@ -251,7 +251,7 @@ Normal provider chain:
 2. In-memory cached successful snapshot for same rounded location/date.
 3. Embedded climatology for the Lake Victoria/Kenya region.
 
-The Kijani client has a three-second timeout and the successful in-memory cache has a 60-minute TTL. Climatology supplies fallback temperature inputs only; its monthly mean rainfall is never credited as a forecast.
+The Kijani client has a three-second timeout and the successful in-memory cache has a 60-minute TTL. Existing advice is refreshed hourly while the PWA is active and online, with reconnect/resume and manual triggers. Climatology supplies fallback temperature inputs only; its monthly mean rainfall is never credited as a forecast.
 
 Demo mode:
 
@@ -269,7 +269,7 @@ Use:
 GET /v1/agro_climate/land?lat=<lat>&lon=<lon>
 ```
 
-The live endpoint serves 5-day hourly weather and agro-climatic forecasts. The adapter extracts and aggregates the next 24-hour window (indices 0–23) for daily irrigation calculations. Supported authentication includes HTTP Basic (`admin:secret` / `YWRtaW46c2VjcmV0`), Bearer tokens, and `X-API-Key`. A sanitized live payload for Kisumu (`-0.0917`, `34.7680`) is committed as `fixtures/weather/kisumu-live.json` and covered by parser regression tests. Note: The `/water` endpoint is reserved for water bodies and rejects land coordinates with `400 {"detail":"not water"}`.
+The live endpoint serves multi-day hourly weather and agro-climatic forecasts. The adapter finds the first forecast timestamp at or after the recommendation time and aggregates the following available 24 aligned samples. Kijani credentials come only from `KIJANISPACE_API_KEY`, which supports HTTP Basic credentials, prefixed Basic/Bearer authorization values, and unprefixed provider tokens/API keys. A sanitized live payload for Kisumu (`-0.0917`, `34.7680`) is committed as `fixtures/weather/kisumu-live.json` and covered by parser regression tests. The `/water` endpoint is reserved for water bodies and is not used for farm plots.
 
 ## 6. Bonus integration boundaries
 
@@ -282,48 +282,33 @@ The live endpoint serves 5-day hourly weather and agro-climatic forecasts. The a
 
 ```text
 axis/
+├── .github/workflows/ci.yaml
+├── AGENTS.md
+├── Containerfile
 ├── README.md
 ├── mise.toml
-├── Containerfile                 # M5
-├── fly.toml                      # M5
-├── openapi.yaml                  # M5, frozen H1
-├── fixtures/                     # M3/M5, shared with permission
-│   ├── weather/kisumu-live.json
-│   ├── weather/kisumu-demo.json
-│   └── recommendations/tomato.json
+├── openapi.yaml
+├── crops.json / climatology.json
+├── fixtures/
+│   ├── recommendations/tomato.json
+│   └── weather/{kisumu-demo,kisumu-live}.json
 ├── docs/
-│   ├── AGRONOMY.md               # M3
-│   ├── WEATHER_MAPPING.md         # M5
-│   └── DEMO_SCRIPT.md             # M5
 ├── backend/
-│   ├── cmd/server/main.go         # M2 wiring
-│   ├── internal/
-│   │   ├── domain/                # frozen shared types
-│   │   ├── httpapi/               # M2
-│   │   ├── irrigation/            # M3
-│   │   ├── catalog/               # M3
-│   │   └── weather/               # M5
-│   ├── data/crops.json            # M3
-│   └── web/                        # generated Vite build, embedded by M2
+│   ├── cmd/{server,golden}/
+│   ├── internal/{catalog,domain,httpapi,insights,irrigation,weather}/
+│   └── web/{fallback,dist}/
 └── frontend/
-    ├── vite.config.ts              # M4
-    └── src/
-        ├── app/                     # M1
-        ├── screens/                 # M1
-        ├── components/              # M1
-        ├── db/                      # M4
-        ├── hooks/                   # M4
-        ├── api/                     # M5 client/types/mocks
-        └── screens/history/         # M4
+    ├── public/
+    └── src/{pages and shared TypeScript modules}
 ```
 
-## 8. Git/integration strategy
+No Fly configuration is currently tracked.
+
+## 8. Integration and verification
 
 GitHub Actions runs the repository-wide Mise check for pull requests and pushes to `main`.
 
-- `main` must always be runnable; Member 5 is accountable.
-- Use branches lasting **60–90 minutes**, not day-long feature branches.
 - Before merge: `mise run check` locally = Go tests + Go vet + TS typecheck + frontend build.
-- Squash merge or fast-forward after a quick human diff.
-- Shared contract files (`openapi.yaml`, `backend/internal/domain`, `fixtures/`) require Member 5 approval after H1.
-- Every AI-agent prompt begins: **“Only modify files under the ownership path I give you. If another file is required, stop and report it.”**
+- Keep `openapi.yaml`, Go domain types, TypeScript types, fixtures, and examples synchronized.
+- Record live-provider, container, browser, deployment, and physical-device checks independently of compilation.
+- Temporary ownership and release tasks live in `docs/TEAM-HANDOFF.md`, not in the architectural contract.

@@ -1,36 +1,33 @@
 # AXIS
 
-**Agricultural Excellence in Irrigation Schemes** is an offline-friendly PWA that turns crop age, plot area, irrigation method and weather into an explainable estimated daily irrigation requirement.
+**Agricultural Excellence in Irrigation Schemes** is an offline-friendly web app that turns crop age, plot area, irrigation method, and weather into an explainable daily irrigation recommendation.
 
-## Handoff status — 21 August 2026
+AXIS answers a practical question for a specific plot: how many litres should be applied today, and for how long when the irrigation flow rate is known?
 
-| Status | Meaning |
-|---|---|
-| ✅ Complete | Implemented and verified by automated checks. |
-| 🟡 Verification pending | Implemented but not yet proven against the live browser or physical phone. |
-| ⬜ Pending | Not implemented or tested. |
-| ⛔ Gated | Deliberately disabled until its acceptance gate passes. |
+## How it works
 
-- ✅ The deterministic backend, contracts, fixtures, tests, frontend typecheck, production PWA build, container build/runtime smoke tests, and authenticated live KijaniSpace capture/adapter are verified.
-- 🟡 The rich Today/Plots/History/More journey, IndexedDB persistence, offline shell, and P1 polish are implemented and require physical phone QA.
-- ⬜ Fly deployment, two physical-phone offline cycles, second-device testing, and demo rehearsal remain release blockers.
-- ⛔ AI is disabled by default, soil humidity is context-only, and automatic sensor/flow-meter hardware ingestion is not implemented.
+1. A farmer creates a plot with its crop, planting date or age, area, location, irrigation method, and optional flow rate.
+2. AXIS obtains a rolling 24-hour forecast from KijaniSpace or uses an explicitly labeled fallback.
+3. A deterministic agronomy engine derives the crop stage and calculates crop-water replacement, forecast-rain credit, irrigation efficiency, litres, and optional runtime.
+4. The complete recommendation and explanation are stored in device-local IndexedDB so they remain available offline.
+5. While the app is open and online, existing advice refreshes hourly. Farmers can also refresh it manually.
 
-See [`docs/TEAM-HANDOFF.md`](docs/TEAM-HANDOFF.md) for the team pickup brief and ownership map.
+## Current capabilities
 
-## What is implemented
+- Four consistent crop stages with crop-specific durations and coefficients.
+- Provider ET₀ when available, with Hargreaves ET₀ fallback.
+- Explainable `IRRIGATE`, `REDUCED`, and `SKIP` decisions.
+- KijaniSpace `/v1/agro_climate/land` integration, three-second timeout, memory cache, climatology fallback, and deterministic fixture mode.
+- Offline plots, recommendations, irrigation events, settings, sensor context, and seven-day history.
+- Manual irrigation records and cumulative flow-meter start/end entry.
+- Data source, confidence, last refresh, and provider-model timestamps.
+- Optional AI explanations behind a disabled-by-default server feature flag. AI never calculates or changes irrigation values.
 
-- Deterministic FAO-56-oriented crop-stage/Kc pipeline with Hargreaves ETo.
-- KijaniSpace provider, three-second timeout, one-hour memory cache, Kenya climatology fallback and deterministic demo mode.
-- Litres, optional flow-rate runtime, crop timeline, weather context, confidence and step-by-step explanation.
-- IndexedDB plots, recommendations, irrigation events, seven-day history, rain-adjustment analytics and offline PWA shell.
-- Manual/recommendation-followed irrigation records and manually entered cumulative flow-meter start/end measurements.
-- Optional soil-humidity observation contract with stale/calibration checks; adjustment is deliberately validation-gated.
-- Optional AI explanations/history insights behind a disabled-by-default backend feature flag. AI never calculates or changes irrigation values.
+Automated Go checks, frontend typechecking/building, the sanitized live Kijani payload, and the container path are verified. Deployment and physical-device offline acceptance remain separate manual checks; see [the current team handoff](docs/TEAM-HANDOFF.md).
 
 ## Run locally
 
-Requirement: [Mise](https://mise.jdx.dev/). Mise installs the pinned Go and Node versions for this project.
+Install [Mise](https://mise.jdx.dev/), then run:
 
 ```bash
 mise install
@@ -39,15 +36,13 @@ mise run build
 AXIS_WEATHER_MODE=fixture mise run run
 ```
 
-Open `http://localhost:8080`. The fixture-mode golden scenario can be printed with:
+Open `http://localhost:8080`.
 
-```bash
-mise exec -- go run ./backend/cmd/golden
-```
-
-A fresh source-only checkout embeds a small backend status page until `mise run build` generates the full PWA. Production bundles in `backend/web/dist` are intentionally not versioned.
+A source-only checkout embeds a small backend status page. `mise run build` generates the PWA into `backend/web/dist`; generated bundles are intentionally not committed.
 
 ## Live weather
+
+Supply Kijani credentials through environment configuration:
 
 ```bash
 export AXIS_WEATHER_MODE=live
@@ -55,89 +50,31 @@ export KIJANISPACE_API_KEY=replace-me
 mise run run
 ```
 
-`KIJANISPACE_API_URL` may override the default `/v1/agro_climate/water` endpoint. The response is deliberately mapped through documented aliases because the supplied provider schema is untyped. Live authentication, field names, units, and the organizer response must be captured and confirmed before judging.
+The default endpoint is `https://api.kijanispace.eu/v1/agro_climate/land`. `KIJANISPACE_API_URL` can override it. The credential value may be HTTP Basic credentials (`username:password`), a prefixed `Basic` or `Bearer` authorization value, or an unprefixed provider token/API key. Never commit credentials.
 
-## Bonus AI insights
-
-The adapter expects an OpenAI-compatible chat-completions endpoint. Enable it only after the stretch gate and keep credentials server-side:
+## Verify changes
 
 ```bash
-export AXIS_AI_INSIGHTS_ENABLED=true
-export AXIS_AI_ENDPOINT=https://provider.example/v1/chat/completions
-export AXIS_AI_API_KEY=replace-me
-export AXIS_AI_MODEL=replace-me
-```
-
-The feature remains hidden when any configuration is missing. Provider failure never affects the native calculation or explanation.
-Overview
-In this project, you will create a function capable of merging multiple objects intelligently based on the type of each value. Rather than simply replacing properties, this function will combine arrays, concatenate strings, add numbers, and recursively merge objects, depending on their types.
-
-Role Play
-You’re designing a configuration system that must merge multiple data sources — user settings, default settings, and system configurations. These sources may contain arrays, strings, numbers, or nested objects. To ensure smooth integration, you’ll build a flexible fusion() function that combines all these inputs intelligently while respecting their data types.
-
-Learning Objective
-By completing this project, you will learn how to:
-
-Traverse and manipulate objects recursively.
-
-Handle type-based logic for merging different data types.
-
-Combine and transform arrays, strings, numbers, and nested objects.
-
-Apply robust conditional logic to manage type mismatches.
-
-Instructions
-General
-Create a function named fusion that merges objects into a new one according to their value types.
-
-Arrays
-If both values are arrays, concatenate them.
-
-fusion({ arr: [1, "2"] }, { arr: [2] });
-// -> { arr: [1, "2", 2] }
-
-fusion(
-  { arr: [], arr1: [5] },
-  { arr: [10, 3], arr1: [15, 3], arr2: ["7", "1"] },
-);
-// -> { arr: [10, 3], arr1: [5, 15, 3], arr2: ["7", "1"] }
-Strings
-If both values are strings, concatenate them with a space between them.
-
-fusion({ str: "salem" }, { str: "alem" });
-// -> { str: "salem alem" }
-
-fusion({ str: "salem" }, { str: "" });
-// -> { str: "salem " }
-Numbers
-If both values are numbers, add them.
-
-fusion({ a: 10, b: 8, c: 1 }, { a: 10, b: 2 });
-// -> { a: 20, b: 10, c: 1 }
-Objects
-If both values are objects, merge them recursively.
-
-fusion({ a: 1, b: { c: "Salem" } }, { a: 10, x: [], b: { c: "alem" } });
-// -> { a: 11, x: [], b: { c: "Salem alem" } }
-
-fusion({ a: { b: [3, 2], c: { d: 8 } } }, { a: { b: [0, 3, 1], c: { d: 3 } } });
-// -> { a: { b: [3, 2, 0, 3, 1], c: { d: 11 } } }
-Type Mismatch
-If the two values have different types, use the value from the second object.
-
-fusion({ a: "hello", b: [] }, { a: 4 });
-// -> { a: 4, b: [] }
-## Verification
-
-```bash
+npm ci --prefix frontend
 mise run check
-podman build -f Containerfile .
 ```
 
-`mise run check` is verified. The Podman command is a required next step, not a completed check.
+`mise run check` runs Go tests and vet plus frontend typechecking and a production build. Browser, service-worker, deployment, provider, container, and physical-device checks must be recorded separately.
 
-Physical-device acceptance requires loading the deployed HTTPS app, saving a complete recommendation, enabling airplane mode, force-closing/reopening twice, recording irrigation offline, and confirming seven-day history survives. Repeat the smoke test on a second device if available.
+## Safety and privacy boundaries
 
-## Safety boundary
+- The deterministic engine is authoritative; AI may only explain its existing output.
+- AXIS estimates daily crop-water replacement, not the field's complete soil-water deficit.
+- Soil-humidity readings are context only until a calibrated adjustment model is locally and agronomically validated.
+- Flow-meter volume is calculated from manually entered cumulative end minus start readings; automatic hardware ingestion is not implemented.
+- Farmer data remains in device-local IndexedDB. The backend is stateless and has no farmer authentication or synchronization service.
 
-AXIS estimates daily replacement demand; it does not directly measure the complete soil-water deficit. Raw, stale or uncalibrated sensor readings do not alter litres. The current UI saves soil-humidity readings as preview context only. Production sensor adjustment requires locally validated field-capacity, wilting-point and root-zone assumptions with agronomic review. Flow-meter readings are entered manually; automatic hardware adapters are future work.
+## Documentation
+
+- [Bird's-eye guide](00-BIRDS-EYE.md)
+- [Architecture and contracts](01-ARCHITECTURE-AND-CONTRACTS.md)
+- [Implementation history](02-24H-PHASE-PLAN.md)
+- [Agronomy engine](04-ENGINE-AND-CROP-STAGES.md)
+- [Offline/PWA behavior](05-OFFLINE-PWA.md)
+- [Kijani weather mapping](docs/WEATHER_MAPPING.md)
+- [Current handoff and manual verification](docs/TEAM-HANDOFF.md)

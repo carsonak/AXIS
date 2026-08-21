@@ -1,6 +1,6 @@
 # AXIS Four-Minute Demo
 
-**Progress — 20 August 2026:** 🟡 the screens and deterministic fixture path are implemented; ⬜ the complete script, airplane-mode sequence, second-device fallback, and recording have not been rehearsed on deployed phones.
+**Current status:** ✅ the screens, deterministic fixture path, live-payload parser, and refresh UI are implemented; ⬜ deployment, the complete airplane-mode sequence, second-device fallback, and recording have not been rehearsed on physical phones.
 
 1. **Problem:** a farmer needs an action, not another weather dashboard.
 2. **Setup:** create the Kisumu quarter-acre tomato plot, ten weeks old, drip, 45 L/min.

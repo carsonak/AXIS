@@ -1,22 +1,43 @@
 # KijaniSpace Weather Mapping
 
-The provider endpoint `/v1/agro_climate/land` serves multi-day forecast arrays (powered by meteoblue data). The AXIS weather adapter extracts and aggregates the 24-hour forecast window (indices 0–23) for daily irrigation recommendations.
+The live provider endpoint is `GET /v1/agro_climate/land?lat=<lat>&lon=<lon>`. A sanitized Kisumu response is stored in [`fixtures/weather/kisumu-live.json`](../fixtures/weather/kisumu-live.json) and covered by parser regression tests.
 
-**Progress — 21 August 2026:** ✅ Live authenticated KijaniSpace capture completed and verified; units, field structure, authentication methods, and regression fixture ([`fixtures/weather/kisumu-live.json`](../fixtures/weather/kisumu-live.json)) verified.
+## Rolling forecast window
 
-| AXIS field | Accepted provider fields / aliases | Units | Aggregation (Next 24h) |
+Kijani supplies aligned hourly arrays under `forecast_data`, including `time`, `temperature`, `precipitation`, `precipitation_probability`, `windspeed`, and `potentialevapotranspiration`.
+
+For each recommendation AXIS:
+
+1. Interprets forecast wall-clock timestamps using the payload timezone.
+2. Finds the first timestamp at or after the recommendation request time.
+3. Selects the following available 24 aligned samples, or fewer near the end of the forecast.
+4. Uses one common start index for every weather field.
+
+| AXIS field | Provider aliases | Units | Rolling-window aggregation |
 |---|---|---|---|
-| `t_min_c` | `temperature`, `t_min_c`, `tmin`, `temperature_min` | °C | `min(temperature[0:24])` |
-| `t_max_c` | `temperature`, `t_max_c`, `tmax`, `temperature_max` | °C | `max(temperature[0:24])` |
-| `rain_next_24h_mm` | `precipitation`, `rain_next_24h_mm`, `precipitation_mm` | mm | `sum(precipitation[0:24])` |
-| `rain_probability` | `precipitation_probability`, `rain_probability`, `pop` | percent (0–100) converted to 0–1 | `max(probability[0:24]) / 100` |
-| `wind_ms` | `windspeed`, `wind_ms`, `wind_speed` | m/s | `mean(windspeed[0:24])` |
-| `et0_mm` | `potentialevapotranspiration`, `evapotranspiration`, `et0_mm` | mm | `sum(potentialevapotranspiration[0:24])` |
-| `provider_observed_at` | `model_run`, `provider_observed_at`, `timestamp` | ISO8601 | Direct string / parsed timestamp |
+| `t_min_c` | `temperature`, `temp` | °C | minimum |
+| `t_max_c` | `temperature`, `temp` | °C | maximum |
+| `rain_next_24h_mm` | `precipitation`, `precipitation_mm`, `rain`, `rainfall`, `rain_mm` | mm | non-negative sum |
+| `rain_probability` | `precipitation_probability`, `probability_of_precipitation`, `pop`, `rain_probability` | percent or 0–1 | maximum, normalized to 0–1 |
+| `wind_ms` | `windspeed`, `wind_speed`, `wind_ms` | m/s | mean |
+| `et0_mm` | `potentialevapotranspiration`, `evapotranspiration`, `et0_mm`, `eto` | mm | sum |
+| `provider_observed_at` | `model_run`, `provider_observed_at`, `observed_at`, `timestamp` | provider time | parsed and stored as UTC RFC3339 |
 
-## Key Findings from Live Capture
-1. **Endpoint**: For agricultural plots and land coordinates, use `GET /v1/agro_climate/land?lat=<lat>&lon=<lon>`. (The `/v1/agro_climate/water` endpoint returns `400 {"detail":"not water"}` for land coordinates).
-2. **Authentication**: Supports HTTP Basic auth (`-u admin:secret` / `Authorization: Basic YWRtaW46c2VjcmV0`), API Key header (`X-API-Key`), and Bearer tokens.
-3. **Payload Structure**: Real provider returns `forecast_data` with hourly arrays (120 elements for 5-day forecast).
-4. **Fixture**: Sanitized live capture for Kisumu (`-0.0917`, `34.7680`) is committed as `fixtures/weather/kisumu-live.json`.
+Temperature and precipitation determine the usable required window. An optional array that cannot cover that same window is omitted rather than shifted. Payloads containing scalar daily fields continue through the scalar compatibility mapper.
 
+## Timezones
+
+The verified live payload identifies `EAT`, which AXIS interprets as UTC+03:00. RFC3339 timestamps retain their explicit offsets. If a naive provider timestamp has no recognized timezone, AXIS uses the location attached to the recommendation request time. The live HTTP path supplies current Nairobi time.
+
+For example, `2026-08-21 13:08` in EAT is stored as `2026-08-21T10:08:00Z`.
+
+## Authentication and failure behavior
+
+Credentials must be supplied through `KIJANISPACE_API_KEY`; no credential is embedded in source or documentation. Supported values are:
+
+- HTTP Basic credentials in `username:password` form;
+- a complete `Basic …` authorization value;
+- a complete `Bearer …` authorization value; or
+- an unprefixed provider token/API key for generic Bearer and `X-API-Key` compatibility.
+
+The client has a three-second timeout. A successful response is cached in memory for 60 minutes and can be used after a live-provider failure before AXIS falls back to embedded climatology. Climatological rainfall is never credited as forecast rain.
