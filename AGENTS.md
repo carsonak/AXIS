@@ -35,7 +35,7 @@ These invariants apply to every human or AI contributor working in this reposito
 - Do not commit `AXIS.webp`, secrets, `node_modules`, TypeScript build metadata, generated Vite JavaScript declarations, or `backend/web/dist` bundles.
 - Generated PWA output belongs in `backend/web/dist`; a committed fallback page keeps a source-only checkout runnable.
 - Preserve unrelated work and stage explicit paths. Avoid broad cleanup or destructive Git commands.
-- Run `make check` before handing off. Record container, deployment, live-provider, browser, and physical-device checks separately; a successful compile does not prove those environments.
+- Run `mise run check` before handing off. Record container, deployment, live-provider, browser, and physical-device checks separately; a successful compile does not prove those environments.
 - Keep incomplete AI and hardware integrations disabled or clearly labeled as previews. Do not turn a scaffold into a product claim.
 
 ## Ownership

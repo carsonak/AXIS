@@ -206,10 +206,10 @@ Anything not merged and working is dropped. No “almost finished” branches su
 ### Progress — 20 August 2026
 
 - ✅ Automated Go tests/vet, TypeScript checking, and production PWA build have passed locally.
-- 🟡 Deterministic rainy, dry, fallback, and fixture cases are automated, but the final clean-tree `make check` will be rerun after handoff cleanup.
+- 🟡 Deterministic rainy, dry, fallback, and fixture cases are automated, but the final clean-tree `mise run check` will be rerun after handoff cleanup.
 - ⬜ Container execution, two offline device cycles, two-phone testing, deployed health, screen recording, and release-candidate tagging remain pending; Gate G4 is not green.
 
-- Run `make check` from clean pull.
+- Run `mise run check` from clean pull.
 - Test at least one rainy/reduced case and one dry/irrigate case.
 - Test all unit conversions.
 - Test Kijani unreachable → fallback.

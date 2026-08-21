@@ -1,0 +1,37 @@
+[tools]
+go = "1.23.12"
+node = "22.22.0"
+
+[tasks.test]
+description = "Run Go tests and static analysis"
+env = { GOCACHE = "/tmp/axis-go-cache" }
+run = [
+  "go test ./...",
+  "go vet ./...",
+]
+
+[tasks.frontend]
+description = "Typecheck and build the frontend"
+dir = "frontend"
+run = [
+  "npm run typecheck",
+  "npm run build",
+]
+
+[tasks.backend]
+description = "Build the backend server"
+env = { GOCACHE = "/tmp/axis-go-cache" }
+run = "go build -o /tmp/axis-server ./backend/cmd/server"
+
+[tasks.check]
+description = "Run all repository checks"
+depends = ["test", "frontend"]
+
+[tasks.build]
+description = "Build the frontend and backend"
+depends = ["frontend", "backend"]
+
+[tasks.run]
+description = "Run the backend server"
+env = { GOCACHE = "/tmp/axis-go-cache" }
+run = "go run ./backend/cmd/server"

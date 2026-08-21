@@ -28,19 +28,20 @@ One contributor may consider AI only after the documented stretch gate passes. A
 ## Start here
 
 ```bash
+mise install
 npm ci --prefix frontend
-make check
-make build
-AXIS_WEATHER_MODE=fixture make run
+mise run check
+mise run build
+AXIS_WEATHER_MODE=fixture mise run run
 ```
 
-Then open `http://localhost:8080`. The full generated PWA is intentionally not committed; a source-only checkout shows a small backend status page until `make build` runs.
+Then open `http://localhost:8080`. The full generated PWA is intentionally not committed; a source-only checkout shows a small backend status page until `mise run build` runs.
 
 Before merging any change:
 
 1. Read `AGENTS.md` and the ownership section in `03-MEMBER-WORKSTREAMS.md`.
 2. Keep OpenAPI, Go types, TypeScript types, and fixtures synchronized.
-3. Run `make check`.
+3. Run `mise run check`.
 4. State which live, container, browser, and physical-device checks were actually performed.
 
 ## Brief to say to the team

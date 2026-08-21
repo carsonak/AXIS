@@ -30,28 +30,29 @@ See [`docs/TEAM-HANDOFF.md`](docs/TEAM-HANDOFF.md) for the team pickup brief and
 
 ## Run locally
 
-Requirements: Go 1.23+, Node 22+ and npm.
+Requirement: [Mise](https://mise.jdx.dev/). Mise installs the pinned Go and Node versions for this project.
 
 ```bash
+mise install
 npm ci --prefix frontend
-make build
-AXIS_WEATHER_MODE=fixture make run
+mise run build
+AXIS_WEATHER_MODE=fixture mise run run
 ```
 
 Open `http://localhost:8080`. The fixture-mode golden scenario can be printed with:
 
 ```bash
-go run ./backend/cmd/golden
+mise exec -- go run ./backend/cmd/golden
 ```
 
-A fresh source-only checkout embeds a small backend status page until `make build` generates the full PWA. Production bundles in `backend/web/dist` are intentionally not versioned.
+A fresh source-only checkout embeds a small backend status page until `mise run build` generates the full PWA. Production bundles in `backend/web/dist` are intentionally not versioned.
 
 ## Live weather
 
 ```bash
 export AXIS_WEATHER_MODE=live
 export KIJANISPACE_API_KEY=replace-me
-go run ./backend/cmd/server
+mise run run
 ```
 
 `KIJANISPACE_API_URL` may override the default `/v1/agro_climate/water` endpoint. The response is deliberately mapped through documented aliases because the supplied provider schema is untyped. Live authentication, field names, units, and the organizer response must be captured and confirmed before judging.
@@ -72,11 +73,11 @@ The feature remains hidden when any configuration is missing. Provider failure n
 ## Verification
 
 ```bash
-make check
+mise run check
 podman build -f Containerfile .
 ```
 
-`make check` is verified. The Podman command is a required next step, not a completed check.
+`mise run check` is verified. The Podman command is a required next step, not a completed check.
 
 Physical-device acceptance requires loading the deployed HTTPS app, saving a complete recommendation, enabling airplane mode, force-closing/reopening twice, recording irrigation offline, and confirming seven-day history survives. Repeat the smoke test on a second device if available.
 
