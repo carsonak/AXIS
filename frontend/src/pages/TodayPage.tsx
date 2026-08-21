@@ -1,68 +1,46 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { createInsight, createRecommendation, type InsightHistoryItem } from '../api'
+import { createInsight, type InsightHistoryItem } from '../api'
 import { Alert, Badge, Card, EmptyState, Modal, Page, Spinner, SketchCrop, SketchWaterDrop, SketchRain } from '../components'
 
 import { useAxis } from '../context'
 import { repos } from '../db'
+import { useRecommendationRefresh } from '../recommendation-refresh'
 import { measuredLitres } from '../sensors'
 import type { IrrigationEvent, StoredInsight, StoredRecommendation } from '../types'
-import { cropAgeDays, deriveStage, formatLitres, formatWindow, freshness, friendlyDate, nairobiDate, recommendationChange } from '../utils'
+import { cropAgeDays, deriveStage, formatLitres, formatWindow, freshness, friendlyDate, nairobiDate, recommendationChange, relativeDataAge } from '../utils'
 
 export default function TodayPage() {
   const { selectedPlot, plots, catalog, online, health, settings } = useAxis()
+  const { recommendation, localReady, refreshing, error: refreshError, now, refresh } = useRecommendationRefresh()
   const navigate = useNavigate()
-  const [recommendation, setRecommendation] = useState<StoredRecommendation>()
   const [latestEvent, setLatestEvent] = useState<IrrigationEvent>()
-  const [localReady, setLocalReady] = useState(false)
   const [weeklyWaterLitres, setWeeklyWaterLitres] = useState(0)
   const [averageSoilMoisture, setAverageSoilMoisture] = useState<number>()
   const [insight, setInsight] = useState<StoredInsight>()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [insightLoading, setInsightLoading] = useState(false)
+  const [pageError, setPageError] = useState('')
   const [showWhy, setShowWhy] = useState(false)
   const [showLog, setShowLog] = useState(false)
 
   const loadLocal = useCallback(async () => {
-    setLocalReady(false)
-    setRecommendation(undefined)
     setLatestEvent(undefined)
     setShowLog(false)
-    if (!selectedPlot) { setRecommendation(undefined); setLocalReady(true); return }
-    const [rec, event, savedInsight, plotEvents, sensorReadings] = await Promise.all([
-      repos.latestRecommendation(selectedPlot.id),
+    if (!selectedPlot) return
+    const [event, savedInsight, plotEvents, sensorReadings] = await Promise.all([
       repos.latestEvent(selectedPlot.id),
       repos.getInsight(selectedPlot.id, nairobiDate()),
       Promise.all(plots.map(plot => repos.eventsForPlot(plot.id, dateSevenDaysAgo()))),
       Promise.all(plots.map(plot => repos.latestSensorReading(plot.id)))
     ])
     const readings = sensorReadings.filter(reading => reading !== undefined)
-    setRecommendation(rec)
     setLatestEvent(event?.date === nairobiDate() ? event : undefined)
     setInsight(savedInsight)
     setWeeklyWaterLitres(plotEvents.flat().reduce((sum, item) => sum + item.litres, 0))
     setAverageSoilMoisture(readings.length > 0 ? readings.reduce((sum, item) => sum + item.volumetricWaterContentPct, 0) / readings.length : undefined)
-    setLocalReady(true)
   }, [selectedPlot?.id, plots])
 
-  const refresh = useCallback(async () => {
-    if (!selectedPlot || !online) return
-    setLoading(true); setError('')
-    try {
-      const date = nairobiDate()
-      const previous = await repos.previousRecommendation(selectedPlot.id, date)
-      const sensor = await repos.latestSensorReading(selectedPlot.id)
-      const result = await createRecommendation(selectedPlot, date, previous, sensor)
-      const saved = await repos.saveRecommendation(result)
-      setRecommendation(saved)
-    } catch (err) { setError(err instanceof Error ? err.message : 'Recommendation refresh failed.') }
-    finally { setLoading(false) }
-  }, [selectedPlot, online])
-
   useEffect(() => { void loadLocal() }, [loadLocal])
-  useEffect(() => {
-    if (localReady && selectedPlot && online && recommendation && recommendation.date !== nairobiDate() && !loading) void refresh()
-  }, [localReady, selectedPlot?.id, online, recommendation?.date, loading, refresh])
 
   if (!selectedPlot) return (
     <Page>
@@ -85,12 +63,12 @@ export default function TodayPage() {
   )
 
   const activePlot = selectedPlot
-  const status = freshness(recommendation)
+  const status = freshness(recommendation, now)
   const change = recommendation ? recommendationChange(recommendation) : undefined
 
   async function generateInsight() {
     if (!recommendation || !health?.ai_insights_enabled) return
-    setLoading(true); setError('')
+    setInsightLoading(true); setPageError('')
     try {
       const [recs, events] = await Promise.all([repos.recommendationsForPlot(activePlot.id, dateSevenDaysAgo()), repos.eventsForPlot(activePlot.id, dateSevenDaysAgo())])
       const history: InsightHistoryItem[] = recs.slice(0, 7).map(rec => ({
@@ -101,8 +79,8 @@ export default function TodayPage() {
       const result = await createInsight(recommendation, history, settings.language)
       const stored: StoredInsight = { id: `${activePlot.id}:${recommendation.date}`, plotId: activePlot.id, date: recommendation.date, summary: result.summary, observations: result.observations, language: result.language, generatedAt: result.generated_at, label: result.label }
       await repos.saveInsight(stored); setInsight(stored)
-    } catch (err) { setError(err instanceof Error ? err.message : 'AI explanation is unavailable.') }
-    finally { setLoading(false) }
+    } catch (err) { setPageError(err instanceof Error ? err.message : 'AI explanation is unavailable.') }
+    finally { setInsightLoading(false) }
   }
 
   // Calculate Farm Overview stats
@@ -146,7 +124,17 @@ export default function TodayPage() {
       </div>
 
       {!online && <Alert tone="warn" title="You’re offline">Saved advice and irrigation logging still work. Reconnect for new weather.</Alert>}
-      {error && <Alert tone="warn" title="Couldn’t refresh">{error}</Alert>}
+      {refreshError && <Alert tone="warn" title="Couldn’t refresh">{refreshError}</Alert>}
+      {pageError && <Alert tone="warn" title="Couldn’t generate insight">{pageError}</Alert>}
+
+      {recommendation && (
+        <div className="refresh-status-row">
+          <span title={`Saved ${recommendation.savedAt}`}>Refreshed {relativeDataAge(recommendation.savedAt, now)}</span>
+          <button className="button secondary compact" disabled={!online || refreshing} onClick={() => void refresh()}>
+            {refreshing ? 'Refreshing…' : 'Refresh now'}
+          </button>
+        </div>
+      )}
 
       {/* Today's Recommendation Card */}
       <Card className="dashboard-rec-card">
@@ -193,8 +181,8 @@ export default function TodayPage() {
               <button className="button secondary compact" onClick={() => setShowWhy(true)}>Why this amount?</button>
             </>
           ) : (
-            <button className="button primary compact" disabled={!online || loading || !localReady} onClick={() => void refresh()}>
-              {loading ? 'Calculating…' : "Get today's advice"}
+            <button className="button primary compact" disabled={!online || refreshing || !localReady} onClick={() => void refresh()}>
+              {refreshing ? 'Calculating…' : "Get today's advice"}
             </button>
           )}
         </div>
@@ -326,7 +314,7 @@ export default function TodayPage() {
           ) : (
             <>
               <p>Ask AI to simplify today’s calculation and summarize up to seven days of your selected local history.</p>
-              <button className="button secondary" disabled={loading || !online} onClick={() => void generateInsight()}>
+              <button className="button secondary" disabled={insightLoading || !online} onClick={() => void generateInsight()}>
                 Generate an insight
               </button>
             </>
@@ -334,7 +322,7 @@ export default function TodayPage() {
         </Card>
       )}
 
-      {loading && <Spinner label="Refreshing weather and advice…" />}
+      {(refreshing || insightLoading) && <Spinner label={refreshing ? 'Refreshing weather and advice…' : 'Generating insight…'} />}
       {showWhy && recommendation && <ExplanationModal recommendation={recommendation} onClose={() => setShowWhy(false)} />}
       {showLog && recommendation && <IrrigationModal recommendation={recommendation} plotId={activePlot.id} onClose={() => setShowLog(false)} onSaved={event => { setLatestEvent(event); setWeeklyWaterLitres(value => value + event.litres); setShowLog(false) }} />}
     </Page>

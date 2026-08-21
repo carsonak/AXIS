@@ -42,13 +42,36 @@ export function deriveStage(crop: CatalogCrop, age: number): { id: StageId; day:
 export function formatLitres(value: number): string { return `${Math.round(value).toLocaleString()} L` }
 export function formatWindow(value: string): string { return value.toLowerCase().replaceAll('_', ' ').replace(/^./, c => c.toUpperCase()) }
 
-export function freshness(rec?: StoredRecommendation): { label: string; tone: 'good' | 'warn' | 'muted' } {
+export function freshness(rec?: StoredRecommendation, now = Date.now()): { label: string; tone: 'good' | 'warn' | 'muted' } {
   if (!rec) return { label: 'No saved advice', tone: 'muted' }
   if (rec.weather.source === 'CLIMATOLOGY') return { label: 'Seasonal estimate', tone: 'warn' }
   if (rec.weather.source === 'DEMO_FIXTURE') return { label: 'Demo weather', tone: 'warn' }
   if (rec.date < nairobiDate()) return { label: `Saved from ${friendlyDate(rec.date)}`, tone: 'warn' }
-  const minutes = (Date.now() - new Date(rec.savedAt).getTime()) / 60_000
+  const minutes = (now - new Date(rec.savedAt).getTime()) / 60_000
   return minutes < 15 ? { label: 'Updated just now', tone: 'good' } : { label: 'Saved earlier today', tone: 'muted' }
+}
+
+export function relativeDataAge(value?: string, now = Date.now()): string {
+  if (!value) return 'time unavailable'
+  const timestamp = Date.parse(value)
+  if (!Number.isFinite(timestamp)) return 'time unavailable'
+  if (timestamp - now > 60_000) return 'at a future time'
+  const minutes = Math.max(0, Math.floor((now - timestamp) / 60_000))
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes} min ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} hr${hours === 1 ? '' : 's'} ago`
+  const days = Math.floor(hours / 24)
+  return `${days} day${days === 1 ? '' : 's'} ago`
+}
+
+export function nairobiDateTime(value?: string): string {
+  if (!value) return 'Unavailable'
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return 'Unavailable'
+  return new Intl.DateTimeFormat('en-KE', {
+    timeZone: 'Africa/Nairobi', dateStyle: 'medium', timeStyle: 'short'
+  }).format(date)
 }
 
 export function friendlyDate(value: string): string {

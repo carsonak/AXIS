@@ -1,6 +1,7 @@
 import { Routes, Route, Outlet, Navigate } from 'react-router-dom';
 import { BottomNav, Spinner } from './components';
 import { useAxis } from './context';
+import { RecommendationRefreshProvider } from './recommendation-refresh';
 import LandingPage from './pages/LandingPage';
 import TodayPage from './pages/TodayPage';
 import PlotsPage from './pages/PlotsPage';
@@ -51,14 +52,16 @@ function AppLayout() {
   const { online } = useAxis()
 
   return (
-    <div className="axis-app">
-      <div className={`network-strip ${online ? 'online' : 'offline'}`} role="status">
-        {online ? 'Online — weather can refresh' : 'Offline — showing saved advice'}
+    <RecommendationRefreshProvider>
+      <div className="axis-app">
+        <div className={`network-strip ${online ? 'online' : 'offline'}`} role="status">
+          {online ? 'Online — weather can refresh' : 'Offline — showing saved advice'}
+        </div>
+        <main className="app-main">
+          <Outlet />
+        </main>
+        <BottomNav />
       </div>
-      <main className="app-main">
-        <Outlet />
-      </main>
-      <BottomNav />
-    </div>
+    </RecommendationRefreshProvider>
   );
 }
