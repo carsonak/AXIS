@@ -13,17 +13,18 @@ export default function PlotFormPage() {
   const { catalog, settings, reload, selectPlot } = useAxis()
   const [existing, setExisting] = useState<Plot>()
   const [name, setName] = useState('Tomato plot')
-  const [lat, setLat] = useState('-0.0917')
-  const [lon, setLon] = useState('34.7680')
-  const [area, setArea] = useState('0.25')
+  const [nameEdited, setNameEdited] = useState(false)
+  const [lat, setLat] = useState('')
+  const [lon, setLon] = useState('')
+  const [area, setArea] = useState('')
   const [areaUnit, setAreaUnit] = useState(settings.areaUnit)
   const [cropId, setCropId] = useState('tomato')
   const [ageMode, setAgeMode] = useState<'age' | 'date'>('age')
-  const [age, setAge] = useState('10')
+  const [age, setAge] = useState('')
   const [ageUnit, setAgeUnit] = useState<'days' | 'weeks'>('weeks')
   const [plantingDate, setPlantingDate] = useState('')
   const [methodId, setMethodId] = useState(settings.defaultIrrigationMethodId ?? 'drip')
-  const [flowRate, setFlowRate] = useState('45')
+  const [flowRate, setFlowRate] = useState('')
   const [locating, setLocating] = useState(false)
   const [error, setError] = useState('')
 
@@ -31,7 +32,7 @@ export default function PlotFormPage() {
     if (!plotId) return
     void repos.getPlot(plotId).then(plot => {
       if (!plot) return
-      setExisting(plot); setName(plot.name); setLat(String(plot.lat)); setLon(String(plot.lon)); setCropId(plot.cropId)
+      setExisting(plot); setNameEdited(true); setName(plot.name); setLat(String(plot.lat)); setLon(String(plot.lon)); setCropId(plot.cropId)
       setPlantingDate(plot.plantingDate); setAgeMode('date'); setMethodId(plot.irrigationMethodId); setFlowRate(plot.flowRateLpm ? String(plot.flowRateLpm) : '')
       setAreaUnit(settings.areaUnit); setArea(String(fromM2(plot.areaM2, settings.areaUnit)))
     })
@@ -41,22 +42,30 @@ export default function PlotFormPage() {
   const crop = catalog?.crops.find(item => item.id === cropId)
   const stage = useMemo(() => crop && resolvedPlantingDate ? deriveStage(crop, cropAgeDays(resolvedPlantingDate)) : undefined, [crop, resolvedPlantingDate])
 
+  function cropLabel(id: string) { return catalog?.crops.find(item => item.id === id)?.display_name ?? 'New' }
+  function chooseCrop(id: string) {
+    setCropId(id)
+    if (!nameEdited) setName(`${cropLabel(id)} plot`)
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault(); setError('')
     try {
       const areaM2 = toM2(Number(area), areaUnit)
-      if (!name.trim()) throw new Error('Give this plot a name.')
-      if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))) throw new Error('Enter a valid location or use device location.')
+      const finalName = name.trim() || `${cropLabel(cropId)} plot`
+      if (!finalName.trim()) throw new Error('Give this plot a name.')
+      if (!lat.trim() || !lon.trim() || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))) throw new Error('Enter a valid location or use device location.')
       if (!Number.isFinite(areaM2) || areaM2 <= 0) throw new Error('Area must be greater than zero.')
+      if (ageMode === 'age' && (!age.trim() || !Number.isFinite(Number(age)) || Number(age) < 0)) throw new Error('Crop age must be zero or greater.')
       if (!resolvedPlantingDate || resolvedPlantingDate > new Date().toISOString().slice(0, 10)) throw new Error('Planting date cannot be in the future.')
       const now = new Date().toISOString()
       const plot: Plot = {
-        id: existing?.id ?? crypto.randomUUID(), name: name.trim(), lat: Number(lat), lon: Number(lon), areaM2,
+        id: existing?.id ?? crypto.randomUUID(), name: finalName, lat: Number(lat), lon: Number(lon), areaM2,
         cropId, plantingDate: resolvedPlantingDate, plantingDateEstimated: ageMode === 'age', irrigationMethodId: methodId,
         flowRateLpm: flowRate ? Number(flowRate) : undefined, createdAt: existing?.createdAt ?? now, updatedAt: now
       }
       if (plot.flowRateLpm !== undefined && (!Number.isFinite(plot.flowRateLpm) || plot.flowRateLpm <= 0)) throw new Error('Flow rate must be a positive number when supplied.')
-      await repos.savePlot(plot); await selectPlot(plot.id); await reload(); navigate('/')
+      await repos.savePlot(plot); await selectPlot(plot.id); await reload(); navigate('/app')
     } catch (err) { setError(err instanceof Error ? err.message : 'Could not save plot.') }
   }
 
@@ -92,7 +101,7 @@ export default function PlotFormPage() {
             <input
               id="plotName"
               value={name}
-              onChange={event => setName(event.target.value)}
+              onChange={event => { setName(event.target.value); setNameEdited(true) }}
               placeholder="e.g. North Block Tomatoes"
               maxLength={80}
             />
@@ -131,7 +140,7 @@ export default function PlotFormPage() {
 
           <div className="form-group">
             <label htmlFor="cropSelect">Crop Variety</label>
-            <select id="cropSelect" value={cropId} onChange={event => setCropId(event.target.value)}>
+            <select id="cropSelect" value={cropId} onChange={event => chooseCrop(event.target.value)}>
               {catalog.crops.map(item => (
                 <option key={item.id} value={item.id}>
                   {item.display_name}{item.display_name_sw ? ` · ${item.display_name_sw}` : ''}
@@ -242,7 +251,7 @@ export default function PlotFormPage() {
 
         {error && <Alert tone="warn" title="Check the form">{error}</Alert>}
         <button className="button primary full" type="submit">
-          {existing ? 'Save Plot Changes' : 'Create Plot & Calculate Advice'}
+          {existing ? 'Save Plot Changes' : 'Create Plot'}
         </button>
       </form>
     </Page>

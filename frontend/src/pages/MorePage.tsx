@@ -5,7 +5,7 @@ import { useAxis } from '../context'
 
 export default function MorePage() {
   const navigate = useNavigate()
-  const { plots, catalog, settings, selectedPlot, saveSettings } = useAxis()
+  const { catalog, settings, saveSettings, online } = useAxis()
   const [showAboutModal, setShowAboutModal] = useState(false)
   const [showUnitsModal, setShowUnitsModal] = useState(false)
 
@@ -16,7 +16,7 @@ export default function MorePage() {
     { label: 'Irrigation Methods', action: () => navigate('/app/recommendations') },
     { label: 'Units (L, litres, °C)', action: () => setShowUnitsModal(true) },
     { label: 'Notifications', action: () => navigate('/app/alerts') },
-    { label: 'Offline Sync', action: () => alert('Offline sync status: All data synchronized locally.') },
+    { label: 'Local & Offline Status', action: () => alert(online ? 'Online. Farmer data remains stored locally on this device.' : 'Offline. Saved advice and farmer records remain available on this device.') },
     { label: 'Help & Support', action: () => navigate('/') },
     { label: 'About AXIS', action: () => setShowAboutModal(true) },
   ]
@@ -49,7 +49,7 @@ export default function MorePage() {
             </p>
             <div className="about-meta-list">
               <div><span>Version:</span> <strong>1.0.0</strong></div>
-              <div><span>Engine:</span> <strong>{catalog?.engine_version ?? 'v1.0'}</strong></div>
+              <div><span>Engine:</span> <strong>{catalog?.engine_version ?? 'Unavailable'}</strong></div>
               <div><span>Offline persistence:</span> <strong>Dexie / IndexedDB</strong></div>
             </div>
           </div>

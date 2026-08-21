@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { createInsight, createRecommendation, type InsightHistoryItem } from '../api'
-import { Alert, Badge, Card, EmptyState, Modal, Page, Spinner, SketchCrop, SketchSun, SketchWaterDrop, SketchRain, SketchTarget, SketchMeter, SketchEdit } from '../components'
+import { Alert, Badge, Card, EmptyState, Modal, Page, Spinner, SketchCrop, SketchWaterDrop, SketchRain } from '../components'
 
 import { useAxis } from '../context'
 import { repos } from '../db'
@@ -9,13 +9,14 @@ import { measuredLitres } from '../sensors'
 import type { IrrigationEvent, StoredInsight, StoredRecommendation } from '../types'
 import { cropAgeDays, deriveStage, formatLitres, formatWindow, freshness, friendlyDate, nairobiDate, recommendationChange } from '../utils'
 
-const stageOrder = ['establishing', 'developing', 'productive', 'maturing'] as const
-
 export default function TodayPage() {
   const { selectedPlot, plots, catalog, online, health, settings } = useAxis()
   const navigate = useNavigate()
   const [recommendation, setRecommendation] = useState<StoredRecommendation>()
   const [latestEvent, setLatestEvent] = useState<IrrigationEvent>()
+  const [localReady, setLocalReady] = useState(false)
+  const [weeklyWaterLitres, setWeeklyWaterLitres] = useState(0)
+  const [averageSoilMoisture, setAverageSoilMoisture] = useState<number>()
   const [insight, setInsight] = useState<StoredInsight>()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -23,12 +24,26 @@ export default function TodayPage() {
   const [showLog, setShowLog] = useState(false)
 
   const loadLocal = useCallback(async () => {
-    if (!selectedPlot) { setRecommendation(undefined); return }
-    const [rec, event, savedInsight] = await Promise.all([
-      repos.latestRecommendation(selectedPlot.id), repos.latestEvent(selectedPlot.id), repos.getInsight(selectedPlot.id, nairobiDate())
+    setLocalReady(false)
+    setRecommendation(undefined)
+    setLatestEvent(undefined)
+    setShowLog(false)
+    if (!selectedPlot) { setRecommendation(undefined); setLocalReady(true); return }
+    const [rec, event, savedInsight, plotEvents, sensorReadings] = await Promise.all([
+      repos.latestRecommendation(selectedPlot.id),
+      repos.latestEvent(selectedPlot.id),
+      repos.getInsight(selectedPlot.id, nairobiDate()),
+      Promise.all(plots.map(plot => repos.eventsForPlot(plot.id, dateSevenDaysAgo()))),
+      Promise.all(plots.map(plot => repos.latestSensorReading(plot.id)))
     ])
-    setRecommendation(rec); setLatestEvent(event); setInsight(savedInsight)
-  }, [selectedPlot?.id])
+    const readings = sensorReadings.filter(reading => reading !== undefined)
+    setRecommendation(rec)
+    setLatestEvent(event?.date === nairobiDate() ? event : undefined)
+    setInsight(savedInsight)
+    setWeeklyWaterLitres(plotEvents.flat().reduce((sum, item) => sum + item.litres, 0))
+    setAverageSoilMoisture(readings.length > 0 ? readings.reduce((sum, item) => sum + item.volumetricWaterContentPct, 0) / readings.length : undefined)
+    setLocalReady(true)
+  }, [selectedPlot?.id, plots])
 
   const refresh = useCallback(async () => {
     if (!selectedPlot || !online) return
@@ -46,8 +61,8 @@ export default function TodayPage() {
 
   useEffect(() => { void loadLocal() }, [loadLocal])
   useEffect(() => {
-    if (selectedPlot && online && recommendation?.date !== nairobiDate() && !loading) void refresh()
-  }, [selectedPlot?.id, online, recommendation?.date])
+    if (localReady && selectedPlot && online && recommendation && recommendation.date !== nairobiDate() && !loading) void refresh()
+  }, [localReady, selectedPlot?.id, online, recommendation?.date, loading, refresh])
 
   if (!selectedPlot) return (
     <Page>
@@ -70,7 +85,6 @@ export default function TodayPage() {
   )
 
   const activePlot = selectedPlot
-  const crop = catalog?.crops.find(item => item.id === activePlot.cropId)
   const status = freshness(recommendation)
   const change = recommendation ? recommendationChange(recommendation) : undefined
 
@@ -92,7 +106,7 @@ export default function TodayPage() {
   }
 
   // Calculate Farm Overview stats
-  const totalCropsCount = Math.max(3, plots.length)
+  const totalCropsCount = plots.length
   const totalAcres = plots.reduce((sum, p) => sum + (p.areaM2 / 4046.8564224), 0).toFixed(1)
 
   return (
@@ -116,7 +130,6 @@ export default function TodayPage() {
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
             <path d="M13.73 21a2 2 0 0 1-3.46 0" />
           </svg>
-          <span className="bell-badge-dot" />
         </Link>
       </div>
 
@@ -124,11 +137,11 @@ export default function TodayPage() {
       <div className="greeting-row">
         <div>
           <h2 className="greeting-text">Hello, Farmer 👋</h2>
-          <p className="location-text">Kisumu, Kenya</p>
+          <p className="location-text">{activePlot.lat.toFixed(4)}, {activePlot.lon.toFixed(4)}</p>
         </div>
         <Link to="/app/weather" className="weather-pill-btn">
           <span>☀️</span>
-          <strong>{recommendation ? Math.round(recommendation.weather.t_max_c) : 27}°C</strong>
+          <strong>{recommendation ? `${Math.round(recommendation.weather.t_max_c)}°C` : 'Weather unavailable'}</strong>
         </Link>
       </div>
 
@@ -142,7 +155,7 @@ export default function TodayPage() {
           <Badge tone={status.tone}>{status.label}</Badge>
         </div>
 
-        <Link to="/app/recommendations" className="rec-card-body">
+        {recommendation ? <Link to="/app/recommendations" className="rec-card-body">
           <div className="rec-left-icon">
             <div className="drop-circle">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="#ffffff">
@@ -152,21 +165,38 @@ export default function TodayPage() {
           </div>
           <div className="rec-content">
             <h3 className="rec-action-title">
-              {recommendation?.decision.action === 'SKIP' ? 'Skip Today' : recommendation?.decision.action === 'REDUCED' ? 'Rain-Adjusted' : 'Irrigate Today'}
+              {recommendation.decision.action === 'SKIP' ? 'Skip Today' : recommendation.decision.action === 'REDUCED' ? 'Rain-Adjusted' : 'Irrigate Today'}
             </h3>
-            <div className="rec-litres-big">{formatLitres(recommendation?.decision.litres ?? 420)}</div>
-            <p className="rec-time-sub">Best time: {formatWindow(recommendation?.decision.recommended_window ?? 'EARLY_MORNING')}</p>
+            <div className="rec-litres-big">{formatLitres(recommendation.decision.litres)}</div>
+            <p className="rec-time-sub">Best time: {formatWindow(recommendation.decision.recommended_window)}</p>
           </div>
           <div className="rec-chevron">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </div>
-        </Link>
+        </Link> : (
+          <div className="rec-card-body">
+            <div className="rec-content">
+              <h3 className="rec-action-title">Weather is needed first</h3>
+              <p className="rec-time-sub">
+                {online ? 'Get today’s weather to calculate a deterministic recommendation.' : 'Reconnect once to obtain weather and generate your first recommendation.'}
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="rec-card-footer">
-          <button className="button primary compact" onClick={() => setShowLog(true)}>Log Irrigation</button>
-          <button className="button secondary compact" onClick={() => setShowWhy(true)}>Why this amount?</button>
+          {recommendation ? (
+            <>
+              <button className="button primary compact" onClick={() => setShowLog(true)}>Log Irrigation</button>
+              <button className="button secondary compact" onClick={() => setShowWhy(true)}>Why this amount?</button>
+            </>
+          ) : (
+            <button className="button primary compact" disabled={!online || loading || !localReady} onClick={() => void refresh()}>
+              {loading ? 'Calculating…' : "Get today's advice"}
+            </button>
+          )}
         </div>
       </Card>
 
@@ -185,12 +215,12 @@ export default function TodayPage() {
             <span className="stat-label">Farm Size</span>
           </Link>
           <Link to="/app/soil" className="overview-stat-card">
-            <strong className="stat-num">28%</strong>
+            <strong className="stat-num">{averageSoilMoisture === undefined ? 'No readings yet' : `${Math.round(averageSoilMoisture)}%`}</strong>
             <span className="stat-label">Avg. Soil Moisture</span>
           </Link>
           <Link to="/app/water" className="overview-stat-card wide-stat">
-            <strong className="stat-num">1,370 L</strong>
-            <span className="stat-label">Water Used (This Week)</span>
+            <strong className="stat-num">{weeklyWaterLitres > 0 ? formatLitres(weeklyWaterLitres) : 'No irrigation logged'}</strong>
+            <span className="stat-label">Water Used (Last 7 Days)</span>
           </Link>
         </div>
       </div>
@@ -208,8 +238,8 @@ export default function TodayPage() {
               const c = catalog?.crops.find(item => item.id === p.cropId)
               const age = cropAgeDays(p.plantingDate)
               const stg = c ? deriveStage(c, age) : undefined
-              const stgName = catalog?.stages.find(item => item.id === stg?.id)?.display_name || 'Flowering Stage'
-              const pct = c ? Math.min(100, Math.round((age / c.total_days) * 100)) : 65
+              const stgName = catalog?.stages.find(item => item.id === stg?.id)?.display_name ?? 'Stage unavailable'
+              const pct = c ? Math.min(100, Math.round((age / c.total_days) * 100)) : 0
 
               return (
                 <div key={p.id} className="crop-summary-row" onClick={() => navigate(`/app/plots/${p.id}/details`)}>
@@ -227,40 +257,7 @@ export default function TodayPage() {
                 </div>
               )
             })
-          ) : (
-            <>
-              <div className="crop-summary-row" onClick={() => navigate('/app/plots')}>
-                <div className="crop-row-icon"><SketchCrop size={22} color="#1b5e20" /></div>
-                <div className="crop-row-info">
-                  <strong>Tomatoes</strong>
-                  <span className="crop-stage-text">Flowering Stage</span>
-                  <div className="crop-row-bar-track"><span className="crop-row-bar-fill" style={{ width: '65%' }} /></div>
-                </div>
-                <div className="crop-row-pct">65%</div>
-              </div>
-
-              <div className="crop-summary-row" onClick={() => navigate('/app/plots')}>
-                <div className="crop-row-icon"><SketchCrop size={22} color="#1b5e20" /></div>
-                <div className="crop-row-info">
-                  <strong>Maize</strong>
-                  <span className="crop-stage-text">Vegetative Stage</span>
-                  <div className="crop-row-bar-track"><span className="crop-row-bar-fill" style={{ width: '40%' }} /></div>
-                </div>
-                <div className="crop-row-pct">40%</div>
-              </div>
-
-              <div className="crop-summary-row" onClick={() => navigate('/app/plots')}>
-                <div className="crop-row-icon"><SketchCrop size={22} color="#1b5e20" /></div>
-                <div className="crop-row-info">
-                  <strong>Kales</strong>
-                  <span className="crop-stage-text">Seedling Stage</span>
-                  <div className="crop-row-bar-track"><span className="crop-row-bar-fill" style={{ width: '20%' }} /></div>
-                </div>
-                <div className="crop-row-pct">20%</div>
-              </div>
-            </>
-
-          )}
+          ) : <p>No crops added yet.</p>}
         </div>
       </div>
 
@@ -273,7 +270,7 @@ export default function TodayPage() {
       {change && <Alert title="Changed since last advice">{change}. Open “Why?” to compare the calculation inputs.</Alert>}
 
       {/* Dedicated Log Irrigation Card */}
-      <Card className="log-irrigation-card">
+      {recommendation && <Card className="log-irrigation-card">
         <div className="log-card-head">
           <div>
             <p className="eyebrow">Water Record</p>
@@ -305,7 +302,7 @@ export default function TodayPage() {
         ) : (
           <div className="unlogged-event-body">
             <p className="log-prompt-text">
-              Prescribed for today: <strong>{formatLitres(recommendation?.decision.litres ?? 420)}</strong> ({recommendation?.decision.duration_minutes ?? 45} min). Record actual applied volume to update your weekly water savings history.
+              Prescribed for today: <strong>{formatLitres(recommendation.decision.litres)}</strong>{recommendation.decision.duration_minutes !== undefined ? ` (${recommendation.decision.duration_minutes} min)` : ''}. Record actual applied volume to update your weekly water history.
             </p>
             <div className="log-card-actions">
               <button className="button primary full" onClick={() => setShowLog(true)}>
@@ -314,7 +311,7 @@ export default function TodayPage() {
             </div>
           </div>
         )}
-      </Card>
+      </Card>}
 
 
       {health?.ai_insights_enabled && (
@@ -337,9 +334,9 @@ export default function TodayPage() {
         </Card>
       )}
 
-      {loading && recommendation && <Spinner label="Refreshing weather and advice…" />}
+      {loading && <Spinner label="Refreshing weather and advice…" />}
       {showWhy && recommendation && <ExplanationModal recommendation={recommendation} onClose={() => setShowWhy(false)} />}
-      {showLog && recommendation && <IrrigationModal recommendation={recommendation} plotId={activePlot.id} onClose={() => setShowLog(false)} onSaved={event => { setLatestEvent(event); setShowLog(false) }} />}
+      {showLog && recommendation && <IrrigationModal recommendation={recommendation} plotId={activePlot.id} onClose={() => setShowLog(false)} onSaved={event => { setLatestEvent(event); setWeeklyWaterLitres(value => value + event.litres); setShowLog(false) }} />}
     </Page>
   )
 }
@@ -399,9 +396,9 @@ function ExplanationModal({ recommendation, onClose }: { recommendation: StoredR
 function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recommendation: StoredRecommendation; plotId: string; onClose(): void; onSaved(event: IrrigationEvent): void }) {
   const [source, setSource] = useState<IrrigationEvent['source']>('FOLLOWED_RECOMMENDATION')
   const [litres, setLitres] = useState(String(recommendation.decision.litres))
-  const [meterId, setMeterId] = useState('Main Pump Flow Meter')
-  const [meterStart, setMeterStart] = useState('12500')
-  const [meterEnd, setMeterEnd] = useState(String(12500 + recommendation.decision.litres))
+  const [meterId, setMeterId] = useState('')
+  const [meterStart, setMeterStart] = useState('')
+  const [meterEnd, setMeterEnd] = useState('')
   const [error, setError] = useState('')
 
   const calculatedFlowMeterLitres = source === 'FLOW_METER' && Number.isFinite(Number(meterEnd) - Number(meterStart)) ? Math.max(0, Number(meterEnd) - Number(meterStart)) : 0
@@ -411,6 +408,8 @@ function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recomme
 
   async function save() {
     try {
+      if (source === 'FLOW_METER' && (!meterId.trim() || !meterStart.trim() || !meterEnd.trim())) throw new Error('Enter the meter identifier and both cumulative readings.')
+      if (source === 'MANUAL' && !litres.trim()) throw new Error('Enter the actual applied water volume.')
       const measured = source === 'FLOW_METER' ? measuredLitres({ meterId, observedAt: new Date().toISOString(), startLitres: Number(meterStart), endLitres: Number(meterEnd) }) : Number(litres)
       if (!Number.isFinite(measured) || measured < 0) throw new Error('Enter a valid applied water volume in litres.')
       const event: IrrigationEvent = {
@@ -454,7 +453,7 @@ function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recomme
         <button
           type="button"
           className={`source-tab-btn ${source === 'MANUAL' ? 'active' : ''}`}
-          onClick={() => setSource('MANUAL')}
+          onClick={() => { setSource('MANUAL'); setLitres('') }}
         >
           ✏️ Manual Volume
         </button>

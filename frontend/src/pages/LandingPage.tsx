@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { SketchWaterDrop, SketchCrop, SketchRain, SketchGear, SketchSun, SketchChart, SketchLock, SketchTarget, SketchMeter, SketchEdit } from '../components'
 
@@ -7,24 +7,8 @@ type Page = 'home' | 'features' | 'workflow' | 'about' | 'contact' | 'privacy';
 
 export default function LandingPage() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
-  const [waterCount, setWaterCount] = useState<number>(0);
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    let startTimestamp: number | null = null;
-    let animationFrameId: number;
-    const totalTarget = 420;
-    const animationDuration = 1200;
-    const runCounter = (currentTimestamp: number) => {
-      if (!startTimestamp) startTimestamp = currentTimestamp;
-      const progress = Math.min((currentTimestamp - startTimestamp) / animationDuration, 1);
-      setWaterCount(Math.floor(progress * totalTarget));
-      if (progress < 1) animationFrameId = window.requestAnimationFrame(runCounter);
-    };
-    animationFrameId = window.requestAnimationFrame(runCounter);
-    return () => { if (animationFrameId) window.cancelAnimationFrame(animationFrameId); };
-  }, []);
 
   const navigateTo = (page: Page) => {
     setCurrentPage(page);
@@ -67,7 +51,7 @@ export default function LandingPage() {
       </header>
 
       <main className="main-content">
-        {currentPage === 'home' && <HomePage navigateTo={navigateTo} waterCount={waterCount} enterApp={enterApp} />}
+        {currentPage === 'home' && <HomePage navigateTo={navigateTo} enterApp={enterApp} />}
         {currentPage === 'features' && <FeaturesPage navigateTo={navigateTo} />}
         {currentPage === 'workflow' && <WorkflowPage navigateTo={navigateTo} />}
         {currentPage === 'about' && <AboutPage navigateTo={navigateTo} />}
@@ -106,7 +90,7 @@ export default function LandingPage() {
 }
 
 /* ---- Home Page ---- */
-function HomePage({ navigateTo, waterCount, enterApp }: { navigateTo: (page: Page) => void; waterCount: number; enterApp: () => void }) {
+function HomePage({ navigateTo, enterApp }: { navigateTo: (page: Page) => void; enterApp: () => void }) {
   return (
     <>
       <section className="hero-section">
@@ -118,7 +102,7 @@ function HomePage({ navigateTo, waterCount, enterApp }: { navigateTo: (page: Pag
               <span className="gradient-text">Sustainable Future.</span>
             </h1>
             <p className="hero-description">
-              Precision sensors and weather-driven recommendations help you apply the right amount of water at the right time.
+              Your plot and crop details combine with weather to calculate explainable daily irrigation advice.
             </p>
             <div className="hero-cta-group">
               <button className="btn btn-primary" onClick={enterApp}>Get Started</button>
@@ -139,9 +123,9 @@ function HomePage({ navigateTo, waterCount, enterApp }: { navigateTo: (page: Pag
                   </svg>
                 </span>
                 <div className="water-card-info">
-                  <span className="water-card-label">Prescribed Today</span>
-                  <strong className="water-card-value">{waterCount} Litres</strong>
-                  <span className="water-card-sub">Best Window: 6:00 AM - 8:00 AM</span>
+                  <span className="water-card-label">Daily Advice</span>
+                  <strong className="water-card-value">Calculated for your plot</strong>
+                  <span className="water-card-sub">Real litres and timing appear after weather is loaded</span>
                 </div>
               </div>
             </div>
@@ -159,7 +143,7 @@ function HomePage({ navigateTo, waterCount, enterApp }: { navigateTo: (page: Pag
               </svg>
             </div>
             <h3>Smart<br />Recommendations</h3>
-            <p className="feature-desc">Tailored watering plans driven by localized soil data.</p>
+            <p className="feature-desc">Daily watering advice driven by crop, plot, irrigation method, and weather data.</p>
           </div>
           <div className="feature-card interactive-card">
             <div className="f-icon blue-bg">
@@ -205,12 +189,12 @@ function HomePage({ navigateTo, waterCount, enterApp }: { navigateTo: (page: Pag
             <div className="step-card">
               <div className="step-badge badge-green">1</div>
               <h3>Add Your Farm</h3>
-              <p>Set up your farm, crops, soil type, and irrigation system.</p>
+              <p>Set up your plot, crop, planting date, location, and irrigation system.</p>
             </div>
             <div className="step-card">
               <div className="step-badge badge-blue">2</div>
-              <h3>We Monitor</h3>
-              <p>We use weather, soil and crop data to analyze conditions.</p>
+              <h3>AXIS Calculates</h3>
+              <p>AXIS uses current weather and configured crop data in its deterministic engine.</p>
             </div>
             <div className="step-card">
               <div className="step-badge badge-amber">3</div>
@@ -226,27 +210,11 @@ function HomePage({ navigateTo, waterCount, enterApp }: { navigateTo: (page: Pag
         </div>
       </section>
 
-      <section className="testimonial-section">
-        <div className="container">
-          <div className="quote-card">
-            <div className="quote-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="#2e7d32" stroke="none">
-                <path d="M10 11H6C6 7.686 8.686 5 12 5V3C7.582 3 4 6.582 4 11v7a2 2 0 002 2h4a2 2 0 002-2v-5a2 2 0 00-2-2zm10 0h-4c0-3.314 2.686-6 6-6V3c-4.418 0-8 3.582-8 8v7a2 2 0 002 2h4a2 2 0 002-2v-5a2 2 0 00-2-2z" />
-              </svg>
-            </div>
-            <div className="quote-content">
-              <p className="quote-text">Since I started using AXIS, I save water and get better yields. It has changed how I farm.</p>
-              <span className="quote-author">Jane, Tomato Farmer, Kiambu</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <section className="ready-banner-section">
         <div className="container ready-inner">
           <div className="ready-text">
             <h2>Ready to Grow Smarter?</h2>
-            <p>Join thousands of farmers optimizing water usage with AXIS.</p>
+            <p>Set up a real plot and calculate today’s irrigation advice.</p>
           </div>
           <button className="btn btn-primary btn-large" onClick={enterApp}>Get Started Now</button>
         </div>
@@ -261,7 +229,7 @@ function FeaturesPage({ navigateTo }: { navigateTo: (page: Page) => void }) {
     <div className="container page-padding">
       <div className="page-hero-banner">
         <h1 className="page-header">Platform Features</h1>
-        <p className="page-lead">AXIS (Agricultural Excellence in Irrigation Schemes) combines stage-specific agronomy, satellite weather, and sensor data into actionable water advice.</p>
+        <p className="page-lead">AXIS combines stage-specific agronomy and weather with optional, clearly contextual sensor readings.</p>
       </div>
 
       <div className="features-grid-detailed">
@@ -279,8 +247,8 @@ function FeaturesPage({ navigateTo }: { navigateTo: (page: Page) => void }) {
 
         <div className="feature-detail-card">
           <div className="f-icon amber-bg"><SketchLock size={26} color="#1b5e20" /></div>
-          <h3>100% Offline Resilience</h3>
-          <p>Built with IndexedDB local storage. Your recommendations, logs, sensor history, and crop stages remain accessible anywhere in the field without cellular data.</p>
+          <h3>Offline Resilience</h3>
+          <p>After initial setup and weather retrieval, saved recommendations, logs, sensor context, and crop stages remain accessible from IndexedDB without cellular data.</p>
         </div>
 
         <div className="feature-detail-card">
@@ -313,8 +281,8 @@ function WorkflowPage({ navigateTo }: { navigateTo: (page: Page) => void }) {
       num: 2,
       title: 'Ingest Localized Weather & Soil Context',
       icon: <SketchSun size={24} color="#1b5e20" />,
-      summary: 'Automated retrieval of maximum/minimum temperatures, rainfall probability, and humidity.',
-      details: 'AXIS connects to localized Kijani weather data sources with automatic memory caching and climatology fallbacks. Optional soil sensors provide contextual moisture readings to validate field status.'
+      summary: 'Retrieval of minimum and maximum temperatures, precipitation, and rainfall probability when available.',
+      details: 'AXIS connects to KijaniSpace weather with automatic memory caching and climatology fallback. Optional soil observations remain contextual and do not adjust the recommendation.'
     },
     {
       num: 3,
@@ -452,7 +420,7 @@ function AboutPage({ navigateTo }: { navigateTo: (page: Page) => void }) {
           <div className="about-card-icon">💧</div>
           <h2>Water Avoidance & Savings</h2>
           <p>
-            Traditional irrigation often results in over-watering or irrigating immediately before rain. AXIS automatically factors in localized precipitation forecasts and soil moisture context to label exact litres saved ("Water avoided because rain was considered").
+            AXIS credits only qualifying forecast rain and reports the deterministic difference as “Water avoided because rain was considered.” Soil-moisture observations remain contextual and do not alter the calculation.
           </p>
         </div>
 
@@ -501,184 +469,22 @@ function AboutPage({ navigateTo }: { navigateTo: (page: Page) => void }) {
 
 /* ---- Contact Page ---- */
 function ContactPage() {
-  const [submitted, setSubmitted] = useState(false);
-  const [formData, setFormData] = useState({
-    fullName: '',
-    contact: '',
-    location: '',
-    cropType: 'Tomatoes',
-    farmSize: '1-2 Acres',
-    message: ''
-  });
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitted(true);
-  };
-
   return (
     <div className="container page-padding">
       <div className="page-hero-banner text-center">
-        <span className="eyebrow-pill">Get in Touch</span>
-        <h1 className="page-header">Contact AXIS Team</h1>
-        <p className="page-lead">Have questions about setting up your scheme, integrating flow meters, or optimizing crop water schedules? Reach out to our specialists.</p>
+        <span className="eyebrow-pill">Hackathon Build</span>
+        <h1 className="page-header">About this demo</h1>
+        <p className="page-lead">AXIS is currently a hackathon prototype. No public support inbox, hotline, or contact submission service is connected.</p>
       </div>
-
       <div className="contact-dual-layout">
-        {/* Contact Info & FAQs */}
-        <div className="contact-info-panel">
-          <div className="info-card">
-            <h2>Contact Information</h2>
-            <p className="info-intro">Our agronomists and support team are available Monday through Saturday.</p>
-
-            <div className="contact-details-list">
-              <div className="contact-detail-item">
-                <span className="detail-icon">📍</span>
-                <div>
-                  <strong>Location</strong>
-                  <p>AXIS Agricultural Hub, Kisumu / Nairobi, Kenya</p>
-                </div>
-              </div>
-
-              <div className="contact-detail-item">
-                <span className="detail-icon">📞</span>
-                <div>
-                  <strong>Farmer Support Hotline</strong>
-                  <p>+254 (0) 700 123 456 / +254 (0) 733 987 654</p>
-                </div>
-              </div>
-
-              <div className="contact-detail-item">
-                <span className="detail-icon">✉️</span>
-                <div>
-                  <strong>Email Inquiry</strong>
-                  <p>support@axis-irrigation.org</p>
-                </div>
-              </div>
-
-              <div className="contact-detail-item">
-                <span className="detail-icon">🕒</span>
-                <div>
-                  <strong>Working Hours</strong>
-                  <p>Mon - Sat: 8:00 AM – 6:00 PM EAT</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="info-faq-card">
-            <h3>Frequently Asked Questions</h3>
-            <div className="faq-item">
-              <strong>Q: Does AXIS require an active internet connection?</strong>
-              <p>No. All calculations, plot records, and irrigation logs run 100% offline in local browser storage.</p>
-            </div>
-            <div className="faq-item">
-              <strong>Q: How do flow meter readings get logged?</strong>
-              <p>You can enter start and end cumulative readings directly into the Log Irrigation modal for automatic volume validation.</p>
-            </div>
-          </div>
+        <div className="info-faq-card">
+          <h3>What works now</h3>
+          <div className="faq-item"><strong>Offline access</strong><p>After one online recommendation, saved advice and local irrigation records remain available offline.</p></div>
+          <div className="faq-item"><strong>Flow-meter logging</strong><p>Farmers manually enter cumulative start and end readings; AXIS stores the validated difference.</p></div>
         </div>
-
-        {/* Form Panel */}
-        <div className="contact-form-panel">
-          {submitted ? (
-            <div className="success-card-banner">
-              <div className="success-check-icon">✓</div>
-              <h2>Message Received!</h2>
-              <p>Thank you, <strong>{formData.fullName || 'Farmer'}</strong>. An AXIS agricultural specialist will contact you shortly regarding your <strong>{formData.cropType}</strong> plot in <strong>{formData.location || 'your area'}</strong>.</p>
-              <button className="btn btn-secondary mt-4" onClick={() => setSubmitted(false)}>Send Another Message</button>
-            </div>
-          ) : (
-            <form className="contact-modern-form" onSubmit={handleSubmit}>
-              <h2>Send Us a Message</h2>
-              <p className="form-sub-text">Fill out your farm details and our support team will get back to you.</p>
-
-              <div className="form-group">
-                <label htmlFor="fullName">Full Name</label>
-                <input
-                  id="fullName"
-                  type="text"
-                  required
-                  placeholder="e.g. John Ochieng"
-                  value={formData.fullName}
-                  onChange={e => setFormData({ ...formData, fullName: e.target.value })}
-                />
-              </div>
-
-              <div className="form-row-2col">
-                <div className="form-group">
-                  <label htmlFor="contact">Phone / Email</label>
-                  <input
-                    id="contact"
-                    type="text"
-                    required
-                    placeholder="0712 345 678 or email"
-                    value={formData.contact}
-                    onChange={e => setFormData({ ...formData, contact: e.target.value })}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="location">Location / County</label>
-                  <input
-                    id="location"
-                    type="text"
-                    required
-                    placeholder="e.g. Kisumu, Kenya"
-                    value={formData.location}
-                    onChange={e => setFormData({ ...formData, location: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="form-row-2col">
-                <div className="form-group">
-                  <label htmlFor="cropType">Primary Crop</label>
-                  <select
-                    id="cropType"
-                    value={formData.cropType}
-                    onChange={e => setFormData({ ...formData, cropType: e.target.value })}
-                  >
-                    <option value="Tomatoes">Tomatoes</option>
-                    <option value="Maize">Maize</option>
-                    <option value="Kales / Vegetables">Kales / Vegetables</option>
-                    <option value="Rice">Rice</option>
-                    <option value="Sugarcane">Sugarcane</option>
-                    <option value="Other">Other Crop</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="farmSize">Farm Size</label>
-                  <select
-                    id="farmSize"
-                    value={formData.farmSize}
-                    onChange={e => setFormData({ ...formData, farmSize: e.target.value })}
-                  >
-                    <option value="Under 1 Acre">Under 1 Acre</option>
-                    <option value="1-2 Acres">1 - 2 Acres</option>
-                    <option value="3-5 Acres">3 - 5 Acres</option>
-                    <option value="Over 5 Acres">Over 5 Acres</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="message">How can we help you?</label>
-                <textarea
-                  id="message"
-                  rows={4}
-                  placeholder="Tell us about your irrigation scheme, water source, or questions..."
-                  value={formData.message}
-                  onChange={e => setFormData({ ...formData, message: e.target.value })}
-                ></textarea>
-              </div>
-
-              <button type="submit" className="btn btn-primary btn-large full-btn">
-                Submit Inquiry
-              </button>
-            </form>
-          )}
+        <div className="info-faq-card">
+          <h3>Not connected in this build</h3>
+          <p>Support messaging, automatic sensor ingestion, user accounts, and cloud synchronization are intentionally not claimed by this prototype.</p>
         </div>
       </div>
     </div>
@@ -700,7 +506,7 @@ function PrivacyPage() {
         <p>All farmer plot dimensions, crop types, planting dates, irrigation history events, and sensor context remain stored strictly inside your browser’s IndexedDB database. AXIS does not upload farmer data to external persistent cloud databases.</p>
 
         <h3>2. Weather Data Ingestion</h3>
-        <p>AXIS fetches localized temperature and precipitation probability forecasts from public weather providers (such as Kijani API) using location coordinates. Weather responses are cached locally on your device.</p>
+        <p>AXIS requests a daily weather snapshot through the configured KijaniSpace integration using plot coordinates. The resulting recommendation and its weather summary are then stored locally on your device.</p>
 
         <h3>3. AI Advisory Labeling</h3>
         <p>Where AI features are enabled on local deployments, advice summaries are generated on request using calculated inputs. AI is purely advisory and never alters authoritative litres, minutes, or recommendation decisions.</p>
@@ -708,4 +514,3 @@ function PrivacyPage() {
     </div>
   );
 }
-

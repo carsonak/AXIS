@@ -1,67 +1,75 @@
-import { useState } from 'react'
-import { AppHeader, Card, Page } from '../components'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Alert, AppHeader, Badge, Card, EmptyState, Page, Spinner } from '../components'
+import { useAxis } from '../context'
+import { repos } from '../db'
+import type { StoredRecommendation } from '../types'
+import { friendlyDate } from '../utils'
 
 export default function WeatherPage() {
-  const [daysCount, setDaysCount] = useState('5')
+  const { selectedPlot, online } = useAxis()
+  const [recommendation, setRecommendation] = useState<StoredRecommendation>()
+  const [loaded, setLoaded] = useState(false)
 
-  const forecastData = [
-    { day: 'Today', date: '20 May', icon: '☀️', high: 29, low: 18, rainProb: 15 },
-    { day: 'Wed', date: '21 May', icon: '⛅', high: 28, low: 17, rainProb: 10 },
-    { day: 'Thu', date: '22 May', icon: '🌧', high: 26, low: 17, rainProb: 60 },
-    { day: 'Fri', date: '23 May', icon: '🌧', high: 24, low: 16, rainProb: 80 },
-    { day: 'Sat', date: '24 May', icon: '⛅', high: 25, low: 17, rainProb: 30 },
-  ]
+  useEffect(() => {
+    setLoaded(false)
+    setRecommendation(undefined)
+    if (!selectedPlot) { setLoaded(true); return }
+    void repos.latestRecommendation(selectedPlot.id).then(value => { setRecommendation(value); setLoaded(true) })
+  }, [selectedPlot?.id])
+
+  if (!selectedPlot) {
+    return <Page><AppHeader showBack eyebrow="Weather" title="Next 24 Hours" /><EmptyState title="Add a plot first" text="AXIS needs plot coordinates to request local weather." action={<Link className="button primary" to="/app/plots/new">Add a plot</Link>} /></Page>
+  }
+
+  if (!loaded) return <Page><AppHeader showBack eyebrow="Weather" title="Next 24 Hours" /><Spinner label="Opening saved weather…" /></Page>
+
+  if (!recommendation) {
+    return (
+      <Page>
+        <AppHeader showBack eyebrow="Weather" title="Next 24 Hours" />
+        {!online && <Alert tone="warn" title="You’re offline">Reconnect once to obtain weather for this plot.</Alert>}
+        <EmptyState title="No saved weather yet" text="Weather is saved with today’s deterministic recommendation." action={online ? <Link className="button primary" to="/app">Get today’s advice</Link> : undefined} />
+      </Page>
+    )
+  }
+
+  const weather = recommendation.weather
+  const probability = weather.rain_probability === undefined ? 'Unavailable' : `${Math.round(weather.rain_probability * 100)}%`
+  const sourceLabel = weather.source === 'KIJANISPACE' ? 'KijaniSpace' : weather.source === 'MEMORY_CACHE' ? 'KijaniSpace memory cache' : weather.source === 'CLIMATOLOGY' ? 'Seasonal climatology fallback' : 'Demo fixture'
 
   return (
     <Page>
-      <AppHeader showBack eyebrow="Forecast" title="Weather" />
+      <AppHeader showBack eyebrow="Weather" title="Next 24 Hours" />
+      {!online && <Alert tone="warn" title="Saved weather">You’re viewing the weather stored with this recommendation. Reconnect to refresh it.</Alert>}
 
-      {/* Location & Days Filter */}
       <Card className="weather-location-bar">
         <div className="location-info">
           <span className="location-pin">📍</span>
-          <strong>Kisumu, Kenya</strong>
+          <strong>{selectedPlot.name} · {selectedPlot.lat.toFixed(4)}, {selectedPlot.lon.toFixed(4)}</strong>
         </div>
-        <select value={daysCount} onChange={e => setDaysCount(e.target.value)}>
-          <option value="5">5 Days</option>
-          <option value="7">7 Days</option>
-          <option value="14">14 Days</option>
-        </select>
+        <Badge tone={weather.source === 'KIJANISPACE' || weather.source === 'MEMORY_CACHE' ? 'good' : 'warn'}>{sourceLabel}</Badge>
       </Card>
 
-      {/* Forecast List */}
       <Card className="forecast-card">
         <div className="section-head">
           <div>
-            <p className="eyebrow">Forecast</p>
-            <h2>5-Day Forecast</h2>
+            <p className="eyebrow">Saved for {friendlyDate(recommendation.date)}</p>
+            <h2>Supported weather window: next 24 hours</h2>
           </div>
         </div>
-
-        <div className="forecast-rows">
-          {forecastData.map(f => (
-            <div key={f.day} className="forecast-item">
-              <span className="forecast-day-name">{f.day}</span>
-              <span className="forecast-weather-icon">{f.icon}</span>
-              <span className="forecast-temps"><strong>{f.high}°</strong> / {f.low}°</span>
-              <span className="forecast-rain-prob">💧 {f.rainProb}%</span>
-            </div>
-          ))}
+        <div className="key-info-grid">
+          <div className="key-info-item"><span>Minimum temperature</span><strong>{weather.t_min_c.toFixed(1)}°C</strong></div>
+          <div className="key-info-item"><span>Maximum temperature</span><strong>{weather.t_max_c.toFixed(1)}°C</strong></div>
+          <div className="key-info-item"><span>{weather.source === 'CLIMATOLOGY' ? 'Seasonal rainfall input' : 'Rain next 24 hours'}</span><strong>{weather.rain_next_24h_mm.toFixed(1)} mm</strong></div>
+          <div className="key-info-item"><span>Rain probability</span><strong>{probability}</strong></div>
+          <div className="key-info-item"><span>Reference ET₀</span><strong>{weather.et0_mm.toFixed(1)} mm · {weather.et0_method}</strong></div>
+          <div className="key-info-item"><span>Wind</span><strong>{weather.wind_ms === undefined ? 'Unavailable' : `${weather.wind_ms.toFixed(1)} m/s`}</strong></div>
         </div>
       </Card>
 
-      {/* Weather Insight Card */}
-      <Card className="weather-insight-box">
-        <div className="section-head">
-          <div>
-            <p className="eyebrow">Analytics</p>
-            <h2>Weather Insight</h2>
-          </div>
-        </div>
-        <p className="weather-insight-desc">
-          Rainfall expected on Thu and Fri. Consider skipping irrigation on those days to save water.
-        </p>
-      </Card>
+      {weather.source === 'CLIMATOLOGY' && <Alert tone="warn" title="Forecast unavailable">This is a low-confidence seasonal fallback, not a rainfall forecast. AXIS does not credit climatological rainfall against today’s requirement.</Alert>}
+      <p className="disclaimer standalone">The current Kijani integration and AXIS contract provide one daily/next-24-hour snapshot. AXIS does not manufacture additional forecast days.</p>
     </Page>
   )
 }

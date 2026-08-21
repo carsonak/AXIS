@@ -1,25 +1,25 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { AppHeader, Badge, Card, EmptyState, Modal, Page, Spinner, SketchWaterDrop, SketchRain, SketchSun, SketchCrop, SketchGear, SketchCheck } from '../components'
+import { Alert, AppHeader, Badge, Card, EmptyState, Modal, Page, Spinner, SketchWaterDrop, SketchRain } from '../components'
 
 import { useAxis } from '../context'
 import { repos } from '../db'
 import { measuredLitres } from '../sensors'
 import type { IrrigationEvent, StoredRecommendation } from '../types'
-import { formatLitres, formatWindow, nairobiDate } from '../utils'
-
-type TimeFilter = 'today' | 'tomorrow' | '7days'
+import { formatLitres, formatWindow, freshness, nairobiDate } from '../utils'
 
 export default function RecommendationsPage() {
-  const { selectedPlot, catalog } = useAxis()
+  const { selectedPlot, catalog, online } = useAxis()
   const navigate = useNavigate()
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>('today')
   const [recommendation, setRecommendation] = useState<StoredRecommendation>()
+  const [loaded, setLoaded] = useState(false)
   const [showLogModal, setShowLogModal] = useState(false)
 
   useEffect(() => {
-    if (!selectedPlot) return
-    void repos.latestRecommendation(selectedPlot.id).then(setRecommendation)
+    setLoaded(false)
+    setRecommendation(undefined)
+    if (!selectedPlot) { setLoaded(true); return }
+    void repos.latestRecommendation(selectedPlot.id).then(value => { setRecommendation(value); setLoaded(true) })
   }, [selectedPlot?.id])
 
   if (!selectedPlot) {
@@ -31,9 +31,25 @@ export default function RecommendationsPage() {
     )
   }
 
-  const crop = catalog?.crops.find(item => item.id === selectedPlot.cropId)
+  if (!loaded) return <Page><AppHeader showBack eyebrow="Recommendations" title="Irrigation Guide" /><Spinner label="Opening saved advice…" /></Page>
+
+  if (!recommendation) {
+    return (
+      <Page>
+        <AppHeader showBack eyebrow="Recommendations" title="Irrigation Guide" />
+        {!online && <Alert tone="warn" title="You’re offline">Reconnect once to obtain weather and generate the first recommendation.</Alert>}
+        <EmptyState
+          title="No recommendation yet"
+          text={online ? "Generate today's advice from the dashboard using this plot and current weather." : 'No saved advice is available for this plot while offline.'}
+          action={online ? <Link className="button primary" to="/app">Get today’s advice</Link> : undefined}
+        />
+      </Page>
+    )
+  }
+
   const method = catalog?.irrigation_methods.find(item => item.id === selectedPlot.irrigationMethodId)
   const acres = (selectedPlot.areaM2 / 4046.8564224).toFixed(1)
+  const status = freshness(recommendation)
 
   return (
     <Page>
@@ -52,12 +68,8 @@ export default function RecommendationsPage() {
         }
       />
 
-      {/* Time filter pills */}
-      <div className="filter-pills">
-        <button className={timeFilter === 'today' ? 'pill active' : 'pill'} onClick={() => setTimeFilter('today')}>Today</button>
-        <button className={timeFilter === 'tomorrow' ? 'pill active' : 'pill'} onClick={() => setTimeFilter('tomorrow')}>Tomorrow</button>
-        <button className={timeFilter === '7days' ? 'pill active' : 'pill'} onClick={() => setTimeFilter('7days')}>7 Days</button>
-      </div>
+      {!online && <Alert tone="warn" title="Saved offline advice">This recommendation remains available. Reconnect to refresh today’s weather.</Alert>}
+      <Badge tone={status.tone}>{status.label}</Badge>
 
       {/* Recommendation Card */}
       <Card className="recommendation-hero-card">
@@ -67,10 +79,10 @@ export default function RecommendationsPage() {
           </svg>
         </div>
         <h2 className="rec-action">
-          {recommendation?.decision.action === 'SKIP' ? 'Skip Irrigation Today' : recommendation?.decision.action === 'REDUCED' ? 'Rain-Adjusted Irrigation' : 'Irrigate Today'}
+          {recommendation.decision.action === 'SKIP' ? 'Skip Irrigation Today' : recommendation.decision.action === 'REDUCED' ? 'Rain-Adjusted Irrigation' : 'Irrigate Today'}
         </h2>
-        <div className="rec-volume">{formatLitres(recommendation?.decision.litres ?? 420)}</div>
-        <p className="rec-window">Best time: {formatWindow(recommendation?.decision.recommended_window ?? 'EARLY_MORNING')}</p>
+        <div className="rec-volume">{formatLitres(recommendation.decision.litres)}</div>
+        <p className="rec-window">Best time: {formatWindow(recommendation.decision.recommended_window)}</p>
       </Card>
 
 
@@ -86,14 +98,14 @@ export default function RecommendationsPage() {
               <h2>Why this water volume?</h2>
             </div>
           </div>
-          <Badge tone={recommendation?.confidence.level === 'LOW' ? 'warn' : 'good'}>
-            {recommendation?.confidence.level ?? 'MEDIUM'} Confidence
+          <Badge tone={recommendation.confidence.level === 'LOW' ? 'warn' : recommendation.confidence.level === 'HIGH' ? 'good' : 'info'}>
+            {recommendation.confidence.level} Confidence
           </Badge>
         </div>
 
         <div className="why-summary-box">
           <p className="why-summary-text">
-            {recommendation?.explanation.summary ?? `Calculated daily crop evapotranspiration (ET_c) replacement for ${crop?.display_name ?? 'Tomatoes'} in ${recommendation?.crop_stage.display_name ?? 'Flowering'} stage under current weather conditions.`}
+            {recommendation.explanation.summary}
           </p>
         </div>
 
@@ -121,15 +133,15 @@ export default function RecommendationsPage() {
         <div className="guide-grid">
           <div className="guide-row">
             <span>Method</span>
-            <strong>{method?.display_name ?? 'Drip Irrigation'}</strong>
+            <strong>{method?.display_name ?? 'Unavailable'}</strong>
           </div>
           <div className="guide-row">
             <span>Duration</span>
-            <strong>{recommendation?.decision.duration_minutes ?? 45} minutes</strong>
+            <strong>{recommendation.decision.duration_minutes !== undefined ? `${recommendation.decision.duration_minutes} minutes` : 'Not available'}</strong>
           </div>
           <div className="guide-row">
             <span>Flow Rate</span>
-            <strong>{selectedPlot.flowRateLpm ?? 9} L/min</strong>
+            <strong>{selectedPlot.flowRateLpm !== undefined ? `${selectedPlot.flowRateLpm} L/min` : 'Not configured'}</strong>
           </div>
           <div className="guide-row">
             <span>Area</span>
@@ -142,7 +154,7 @@ export default function RecommendationsPage() {
         </button>
       </Card>
 
-      {showLogModal && (
+      {showLogModal && recommendation && (
         <IrrigationModal
           recommendation={recommendation}
           plotId={selectedPlot.id}
@@ -157,21 +169,23 @@ export default function RecommendationsPage() {
   )
 }
 
-function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recommendation?: StoredRecommendation; plotId: string; onClose(): void; onSaved(event: IrrigationEvent): void }) {
+function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recommendation: StoredRecommendation; plotId: string; onClose(): void; onSaved(event: IrrigationEvent): void }) {
   const [source, setSource] = useState<IrrigationEvent['source']>('FOLLOWED_RECOMMENDATION')
-  const [litres, setLitres] = useState(String(recommendation?.decision.litres ?? 420))
-  const [meterId, setMeterId] = useState('Main Pump Flow Meter')
-  const [meterStart, setMeterStart] = useState('12500')
-  const [meterEnd, setMeterEnd] = useState(String(12500 + (recommendation?.decision.litres ?? 420)))
+  const [litres, setLitres] = useState(String(recommendation.decision.litres))
+  const [meterId, setMeterId] = useState('')
+  const [meterStart, setMeterStart] = useState('')
+  const [meterEnd, setMeterEnd] = useState('')
   const [error, setError] = useState('')
 
   const calculatedFlowMeterLitres = source === 'FLOW_METER' && Number.isFinite(Number(meterEnd) - Number(meterStart)) ? Math.max(0, Number(meterEnd) - Number(meterStart)) : 0
   const activeAppliedVolume = source === 'FLOW_METER' ? calculatedFlowMeterLitres : (Number(litres) || 0)
-  const targetVolume = recommendation?.decision.litres ?? 420
+  const targetVolume = recommendation.decision.litres
   const diffVolume = activeAppliedVolume - targetVolume
 
   async function save() {
     try {
+      if (source === 'FLOW_METER' && (!meterId.trim() || !meterStart.trim() || !meterEnd.trim())) throw new Error('Enter the meter identifier and both cumulative readings.')
+      if (source === 'MANUAL' && !litres.trim()) throw new Error('Enter the actual applied water volume.')
       const measured = source === 'FLOW_METER' ? measuredLitres({ meterId, observedAt: new Date().toISOString(), startLitres: Number(meterStart), endLitres: Number(meterEnd) }) : Number(litres)
       if (!Number.isFinite(measured) || measured < 0) throw new Error('Enter a valid applied water volume in litres.')
       const event: IrrigationEvent = {
@@ -179,7 +193,7 @@ function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recomme
         plotId,
         date: nairobiDate(),
         litres: measured,
-        recommendedLitres: recommendation?.decision.litres_exact ?? 420,
+        recommendedLitres: recommendation.decision.litres_exact,
         source,
         createdAt: new Date().toISOString(),
         meterId: source === 'FLOW_METER' ? meterId : undefined,
@@ -201,7 +215,7 @@ function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recomme
         <button
           type="button"
           className={`source-tab-btn ${source === 'FOLLOWED_RECOMMENDATION' ? 'active' : ''}`}
-          onClick={() => { setSource('FOLLOWED_RECOMMENDATION'); setLitres(String(recommendation?.decision.litres ?? 420)); }}
+          onClick={() => { setSource('FOLLOWED_RECOMMENDATION'); setLitres(String(recommendation.decision.litres)); }}
         >
           🎯 Followed Advice
         </button>
@@ -215,7 +229,7 @@ function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recomme
         <button
           type="button"
           className={`source-tab-btn ${source === 'MANUAL' ? 'active' : ''}`}
-          onClick={() => setSource('MANUAL')}
+          onClick={() => { setSource('MANUAL'); setLitres('') }}
         >
           ✏️ Manual Volume
         </button>
@@ -276,4 +290,3 @@ function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recomme
     </Modal>
   )
 }
-

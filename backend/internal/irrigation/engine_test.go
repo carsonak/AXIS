@@ -181,6 +181,30 @@ func TestSkipReturnsZeroApplication(t *testing.T) {
 	if rec.Decision.ModeledGrossDepthBeforeThreshold < 0 {
 		t.Fatal("modeled pre-threshold depth must remain explainable")
 	}
+	if math.Abs(rec.Decision.RainAdjustmentLitres-rec.Decision.BaselineLitresNoRain) > .2 {
+		t.Fatalf("skip caused by rain must attribute the full baseline to rain: %+v", rec.Decision)
+	}
+}
+
+func TestSkipWithoutRainHasNoRainAdjustment(t *testing.T) {
+	cold := dryWeather()
+	cold.TMinC, cold.TMaxC = 20, 20
+	rec, err := Compute(baseRequest(), cold, testCatalog(t), fixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Weather.RainNext24HMM != 0 {
+		t.Fatal("test requires a dry day")
+	}
+	if rec.Decision.Action != "SKIP" {
+		t.Fatalf("action = %s, want SKIP for the sub-threshold dry day", rec.Decision.Action)
+	}
+	if rec.Decision.BaselineLitresNoRain <= 0 {
+		t.Fatal("baseline must remain visible on skip days")
+	}
+	if rec.Decision.RainAdjustmentLitres != 0 {
+		t.Fatalf("dry skip must not report %.1f L as water avoided because of rain", rec.Decision.RainAdjustmentLitres)
+	}
 }
 
 func TestValidationAndUnknownLookup(t *testing.T) {

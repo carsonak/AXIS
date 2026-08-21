@@ -3709,3 +3709,29 @@ body, html, #root {
     flex-direction: column;
   }
 }
+.boot {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+}
+
+.network-strip {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  padding: 0.35rem 1rem;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.network-strip.online {
+  color: #1b5e20;
+  background: #e8f5e9;
+}
+
+.network-strip.offline {
+  color: #854d0e;
+  background: #fef3c7;
+}

@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { AppHeader, Badge, Card, EmptyState, Page } from '../components'
+import { AppHeader, Card, EmptyState, Page, SketchCrop } from '../components'
 import { useAxis } from '../context'
 import { repos } from '../db'
 import { cropAgeDays, deriveStage } from '../utils'
@@ -40,8 +40,8 @@ export default function PlotsPage() {
             const crop = catalog?.crops.find(item => item.id === plot.cropId)
             const ageDays = cropAgeDays(plot.plantingDate)
             const stage = crop ? deriveStage(crop, ageDays) : undefined
-            const stageLabel = catalog?.stages.find(item => item.id === stage?.id)?.display_name || 'Flowering Stage'
-            const pct = crop ? Math.min(100, Math.round((ageDays / crop.total_days) * 100)) : 65
+            const stageLabel = catalog?.stages.find(item => item.id === stage?.id)?.display_name ?? 'Stage unavailable'
+            const pct = crop ? Math.min(100, Math.round((ageDays / crop.total_days) * 100)) : 0
 
             return (
               <Card
@@ -54,12 +54,12 @@ export default function PlotsPage() {
               >
                 <div className="crop-card-left">
                   <div className="crop-big-icon">
-                    {plot.cropId === 'tomato' ? '🍅' : plot.cropId === 'maize' ? '🌽' : '🥬'}
+                    <SketchCrop size={28} color="#1b5e20" />
                   </div>
                   <div className="crop-card-info">
                     <h2>{plot.name}</h2>
                     <p className="crop-sub-detail">Planted: <strong>{new Date(plot.plantingDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</strong></p>
-                    <p className="crop-sub-detail">Variety: <strong>{plot.cropId === 'tomato' ? 'Rio Grande' : plot.cropId === 'maize' ? 'H614' : 'Sukuma'}</strong></p>
+                    <p className="crop-sub-detail">Crop: <strong>{crop?.display_name ?? plot.cropId}</strong></p>
                     <p className="crop-sub-detail">Stage: <strong>{stageLabel}</strong></p>
                   </div>
                 </div>
