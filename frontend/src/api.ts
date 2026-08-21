@@ -32,9 +32,14 @@ export async function createRecommendation(plot: Plot, date: string, previous?: 
 
 export interface InsightHistoryItem { date: string; recommended_litres: number; applied_litres?: number; rain_adjustment_litres?: number }
 export interface InsightResponse { summary: string; observations: string[]; language: string; generated_at: string; label: string }
+/**
+ * Requests grounded AI qualitative explanation of deterministic irrigation recommendations.
+ * Enforces a maximum of 7 history items per system safety invariants.
+ */
 export async function createInsight(recommendation: Recommendation, history: InsightHistoryItem[], language: string): Promise<InsightResponse> {
   return request('/api/v1/insights', { method: 'POST', body: JSON.stringify({ recommendation, history: history.slice(0, 7), language }) })
 }
+
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController()
