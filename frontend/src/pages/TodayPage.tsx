@@ -12,6 +12,7 @@ import { cropAgeDays, deriveStage, formatLitres, formatWindow, freshness, friend
 
 export default function TodayPage() {
   const { selectedPlot, plots, catalog, online, health, settings } = useAxis()
+  const selectedPlotID = selectedPlot?.id
   const { recommendation, localReady, refreshing, error: refreshError, now, refresh } = useRecommendationRefresh()
   const navigate = useNavigate()
   const [latestEvent, setLatestEvent] = useState<IrrigationEvent>()
@@ -26,10 +27,10 @@ export default function TodayPage() {
   const loadLocal = useCallback(async () => {
     setLatestEvent(undefined)
     setShowLog(false)
-    if (!selectedPlot) return
+    if (!selectedPlotID) return
     const [event, savedInsight, plotEvents, sensorReadings] = await Promise.all([
-      repos.latestEvent(selectedPlot.id),
-      repos.getInsight(selectedPlot.id, nairobiDate()),
+      repos.latestEvent(selectedPlotID),
+      repos.getInsight(selectedPlotID, nairobiDate()),
       Promise.all(plots.map(plot => repos.eventsForPlot(plot.id, dateSevenDaysAgo()))),
       Promise.all(plots.map(plot => repos.latestSensorReading(plot.id)))
     ])
@@ -38,8 +39,7 @@ export default function TodayPage() {
     setInsight(savedInsight)
     setWeeklyWaterLitres(plotEvents.flat().reduce((sum, item) => sum + item.litres, 0))
     setAverageSoilMoisture(readings.length > 0 ? readings.reduce((sum, item) => sum + item.volumetricWaterContentPct, 0) / readings.length : undefined)
-  }, [selectedPlot?.id, plots])
-
+  }, [selectedPlotID, plots])
   useEffect(() => { void loadLocal() }, [loadLocal])
 
   if (!selectedPlot) return (
@@ -76,7 +76,10 @@ export default function TodayPage() {
         applied_litres: events.find(event => event.date === rec.date)?.litres,
         rain_adjustment_litres: rec.decision.rain_adjustment_litres
       }))
-      const result = await createInsight(recommendation, history, settings.language)
+      const question = settings.language === 'sw'
+        ? 'Eleza pendekezo la leo na muundo unaoonekana katika historia iliyotolewa.'
+        : "Explain today's recommendation and any pattern supported by the supplied history."
+      const result = await createInsight(question, recommendation, history, settings.language)
       const stored: StoredInsight = { id: `${activePlot.id}:${recommendation.date}`, plotId: activePlot.id, date: recommendation.date, summary: result.summary, observations: result.observations, language: result.language, generatedAt: result.generated_at, label: result.label }
       await repos.saveInsight(stored); setInsight(stored)
     } catch (err) { setPageError(err instanceof Error ? err.message : 'AI explanation is unavailable.') }

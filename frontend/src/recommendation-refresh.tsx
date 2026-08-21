@@ -20,6 +20,7 @@ const RecommendationRefreshContext = createContext<RecommendationRefreshValue | 
 
 export function RecommendationRefreshProvider({ children }: { children: ReactNode }) {
   const { selectedPlot, online } = useAxis()
+  const selectedPlotID = selectedPlot?.id
   const [recommendation, setRecommendation] = useState<StoredRecommendation>()
   const [localReady, setLocalReady] = useState(false)
   const [loadedPlotID, setLoadedPlotID] = useState<string>()
@@ -27,9 +28,9 @@ export function RecommendationRefreshProvider({ children }: { children: ReactNod
   const [error, setError] = useState('')
   const [now, setNow] = useState(Date.now())
   const refreshingRef = useRef(false)
-  const selectedPlotIDRef = useRef(selectedPlot?.id)
+  const selectedPlotIDRef = useRef(selectedPlotID)
 
-  useEffect(() => { selectedPlotIDRef.current = selectedPlot?.id }, [selectedPlot?.id])
+  useEffect(() => { selectedPlotIDRef.current = selectedPlotID }, [selectedPlotID])
 
   useEffect(() => {
     let active = true
@@ -37,23 +38,23 @@ export function RecommendationRefreshProvider({ children }: { children: ReactNod
     setLoadedPlotID(undefined)
     setRecommendation(undefined)
     setError('')
-    if (!selectedPlot) {
+    if (!selectedPlotID) {
       setLocalReady(true)
       return () => { active = false }
     }
-    void repos.latestRecommendation(selectedPlot.id).then(value => {
+    void repos.latestRecommendation(selectedPlotID).then(value => {
       if (!active) return
       setRecommendation(value)
-      setLoadedPlotID(selectedPlot.id)
+      setLoadedPlotID(selectedPlotID)
       setLocalReady(true)
     }).catch(reason => {
       if (!active) return
       setError(reason instanceof Error ? reason.message : 'Saved recommendation could not be opened.')
-      setLoadedPlotID(selectedPlot.id)
+      setLoadedPlotID(selectedPlotID)
       setLocalReady(true)
     })
     return () => { active = false }
-  }, [selectedPlot?.id])
+  }, [selectedPlotID])
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60_000)
@@ -82,7 +83,7 @@ export function RecommendationRefreshProvider({ children }: { children: ReactNod
   }, [selectedPlot, online])
 
   useEffect(() => {
-    if (!localReady || !selectedPlot || !online || !recommendation) return
+    if (!localReady || !selectedPlotID || !online || !recommendation) return
     let cancelled = false
     let timer: number | undefined
     const savedAt = Date.parse(recommendation.savedAt)
@@ -102,7 +103,7 @@ export function RecommendationRefreshProvider({ children }: { children: ReactNod
       cancelled = true
       if (timer !== undefined) window.clearTimeout(timer)
     }
-  }, [localReady, selectedPlot?.id, online, recommendation?.date, recommendation?.savedAt, refresh])
+  }, [localReady, selectedPlotID, online, recommendation, refresh])
 
   useEffect(() => {
     if (!localReady || !online || !recommendation) return
@@ -117,10 +118,10 @@ export function RecommendationRefreshProvider({ children }: { children: ReactNod
       document.removeEventListener('visibilitychange', refreshIfStale)
       window.removeEventListener('focus', refreshIfStale)
     }
-  }, [localReady, online, recommendation?.date, recommendation?.savedAt, refresh])
+  }, [localReady, online, recommendation, refresh])
 
-  const selectedRecommendation = recommendation?.plot_id === selectedPlot?.id ? recommendation : undefined
-  const selectedLocalReady = localReady && loadedPlotID === selectedPlot?.id
+  const selectedRecommendation = recommendation?.plot_id === selectedPlotID ? recommendation : undefined
+  const selectedLocalReady = localReady && loadedPlotID === selectedPlotID
   const value = useMemo(
     () => ({ recommendation: selectedRecommendation, localReady: selectedLocalReady, refreshing, error, now, refresh }),
     [selectedRecommendation, selectedLocalReady, refreshing, error, now, refresh]

@@ -221,6 +221,7 @@ type InsightHistoryItem struct {
 }
 
 type InsightRequest struct {
+	Question       string                   `json:"question"`
 	Recommendation IrrigationRecommendation `json:"recommendation"`
 	History        []InsightHistoryItem     `json:"history"`
 	Language       string                   `json:"language,omitempty"`

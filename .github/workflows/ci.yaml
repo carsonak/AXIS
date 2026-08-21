@@ -27,5 +27,8 @@ jobs:
           install: true
           cache: true
 
-      - run: npm ci --prefix frontend
-      - run: mise run check
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Lint, typecheck, test, and build
+        run: mise run check
