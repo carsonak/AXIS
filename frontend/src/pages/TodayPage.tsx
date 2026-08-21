@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { createInsight, createRecommendation, type InsightHistoryItem } from '../api'
-import { Alert, Badge, Card, EmptyState, Modal, Page, Spinner, SketchCrop, SketchWaterDrop, SketchRain } from '../components'
+import { Alert, Badge, Card, EmptyState, Modal, Page, Spinner, SketchCrop, SketchWaterDrop, SketchRain, AIChatAssistant } from '../components'
+
 
 import { useAxis } from '../context'
 import { repos } from '../db'
@@ -18,6 +19,7 @@ export default function TodayPage() {
   const [weeklyWaterLitres, setWeeklyWaterLitres] = useState(0)
   const [averageSoilMoisture, setAverageSoilMoisture] = useState<number>()
   const [insight, setInsight] = useState<StoredInsight>()
+  const [historyItems, setHistoryItems] = useState<InsightHistoryItem[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showWhy, setShowWhy] = useState(false)
@@ -29,12 +31,13 @@ export default function TodayPage() {
     setLatestEvent(undefined)
     setShowLog(false)
     if (!selectedPlot) { setRecommendation(undefined); setLocalReady(true); return }
-    const [rec, event, savedInsight, plotEvents, sensorReadings] = await Promise.all([
+    const [rec, event, savedInsight, plotEvents, sensorReadings, activePlotEvents] = await Promise.all([
       repos.latestRecommendation(selectedPlot.id),
       repos.latestEvent(selectedPlot.id),
       repos.getInsight(selectedPlot.id, nairobiDate()),
       Promise.all(plots.map(plot => repos.eventsForPlot(plot.id, dateSevenDaysAgo()))),
-      Promise.all(plots.map(plot => repos.latestSensorReading(plot.id)))
+      Promise.all(plots.map(plot => repos.latestSensorReading(plot.id))),
+      repos.eventsForPlot(selectedPlot.id, dateSevenDaysAgo())
     ])
     const readings = sensorReadings.filter(reading => reading !== undefined)
     setRecommendation(rec)
@@ -42,8 +45,10 @@ export default function TodayPage() {
     setInsight(savedInsight)
     setWeeklyWaterLitres(plotEvents.flat().reduce((sum, item) => sum + item.litres, 0))
     setAverageSoilMoisture(readings.length > 0 ? readings.reduce((sum, item) => sum + item.volumetricWaterContentPct, 0) / readings.length : undefined)
+    setHistoryItems(activePlotEvents.map(e => ({ date: e.date, recommended_litres: e.recommendedLitres ?? 0, applied_litres: e.litres })))
     setLocalReady(true)
   }, [selectedPlot?.id, plots])
+
 
   const refresh = useCallback(async () => {
     if (!selectedPlot || !online) return
@@ -107,7 +112,7 @@ export default function TodayPage() {
 
   // Calculate Farm Overview stats
   const totalCropsCount = plots.length
-  const totalAcres = plots.reduce((sum, p) => sum + (p.areaM2 / 4046.8564224), 0).toFixed(1)
+  const totalAcres = plots.reduce((sum, p) => sum + (p.areaM2 / 4046.8564224), 0).toFixed(4)
 
   return (
     <Page>
@@ -211,7 +216,7 @@ export default function TodayPage() {
             <span className="stat-label">Crops</span>
           </Link>
           <Link to="/app/more" className="overview-stat-card">
-            <strong className="stat-num">{totalAcres} ac</strong>
+            <strong className="stat-num">{totalAcres} acres</strong>
             <span className="stat-label">Farm Size</span>
           </Link>
           <Link to="/app/soil" className="overview-stat-card">
@@ -314,25 +319,8 @@ export default function TodayPage() {
       </Card>}
 
 
-      {health?.ai_insights_enabled && (
-        <Card className="ai-card">
-          <Badge tone="info">Bonus · AI insights</Badge>
-          <h2>Explain the pattern, not the litres</h2>
-          {insight ? (
-            <>
-              <p>{insight.summary}</p>
-              <small>{insight.label}. The deterministic AXIS recommendation remains authoritative.</small>
-            </>
-          ) : (
-            <>
-              <p>Ask AI to simplify today’s calculation and summarize up to seven days of your selected local history.</p>
-              <button className="button secondary" disabled={loading || !online} onClick={() => void generateInsight()}>
-                Generate an insight
-              </button>
-            </>
-          )}
-        </Card>
-      )}
+
+
 
       {loading && <Spinner label="Refreshing weather and advice…" />}
       {showWhy && recommendation && <ExplanationModal recommendation={recommendation} onClose={() => setShowWhy(false)} />}
