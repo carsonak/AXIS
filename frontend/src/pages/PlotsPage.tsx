@@ -7,16 +7,73 @@ import { cropAgeDays, deriveStage } from '../utils'
 export default function PlotsPage() {
   const { plots, catalog, selectedPlot, selectPlot, reload } = useAxis()
   const navigate = useNavigate()
-  async function remove(id: string) {
+
+  async function remove(id: string, e: React.MouseEvent) {
+    e.stopPropagation()
     if (!window.confirm('Delete this plot and its local recommendation/history data?')) return
-    await repos.removePlot(id); await reload()
+    await repos.removePlot(id)
+    await reload()
   }
-  return <Page><AppHeader eyebrow="Your farm" title="Plots" action={<Link className="button compact primary" to="/plots/new">+ Add plot</Link>} />
-    {plots.length === 0 ? <EmptyState title="No plots yet" text="Add a field to start receiving crop- and weather-specific irrigation guidance." action={<Link className="button primary" to="/plots/new">Add a plot</Link>} /> : <div className="plot-list">{plots.map(plot => {
-      const crop = catalog?.crops.find(item => item.id === plot.cropId)
-      const stage = crop ? deriveStage(crop, cropAgeDays(plot.plantingDate)) : undefined
-      const stageLabel = catalog?.stages.find(item => item.id === stage?.id)?.display_name
-      return <Card key={plot.id} className={selectedPlot?.id === plot.id ? 'plot-card selected' : 'plot-card'}><button className="plot-select" onClick={() => void selectPlot(plot.id)}><div className="crop-glyph">{plot.cropId === 'tomato' ? '●' : plot.cropId === 'maize' ? '♒' : '♣'}</div><div><h2>{plot.name}</h2><p>{crop?.display_name ?? plot.cropId} · {(plot.areaM2 / 4046.8564224).toFixed(2)} acres</p><span>{stageLabel ?? 'Stage unavailable'}{stage ? ` · day ${cropAgeDays(plot.plantingDate)}` : ''}</span></div>{selectedPlot?.id === plot.id && <Badge tone="good">Active</Badge>}</button><div className="plot-card-actions"><button className="text-button" onClick={() => navigate(`/plots/${plot.id}`)}>Edit</button><button className="text-button danger" onClick={() => void remove(plot.id)}>Delete</button></div></Card>
-    })}</div>}
-  </Page>
+
+  return (
+    <Page>
+      <AppHeader
+        showBack
+        eyebrow="My Farm"
+        title="My Crops"
+        action={
+          <Link className="button compact primary add-crop-btn" to="/app/plots/new">
+            + Add Crop
+          </Link>
+        }
+      />
+
+      {plots.length === 0 ? (
+        <EmptyState
+          title="No crops yet"
+          text="Add your first crop to start receiving precision irrigation guidance."
+          action={<Link className="button primary" to="/app/plots/new">Add a Crop</Link>}
+        />
+      ) : (
+        <div className="crop-card-list">
+          {plots.map(plot => {
+            const crop = catalog?.crops.find(item => item.id === plot.cropId)
+            const ageDays = cropAgeDays(plot.plantingDate)
+            const stage = crop ? deriveStage(crop, ageDays) : undefined
+            const stageLabel = catalog?.stages.find(item => item.id === stage?.id)?.display_name || 'Flowering Stage'
+            const pct = crop ? Math.min(100, Math.round((ageDays / crop.total_days) * 100)) : 65
+
+            return (
+              <Card
+                key={plot.id}
+                className="my-crop-card"
+                onClick={() => {
+                  void selectPlot(plot.id)
+                  navigate(`/app/plots/${plot.id}/details`)
+                }}
+              >
+                <div className="crop-card-left">
+                  <div className="crop-big-icon">
+                    {plot.cropId === 'tomato' ? '🍅' : plot.cropId === 'maize' ? '🌽' : '🥬'}
+                  </div>
+                  <div className="crop-card-info">
+                    <h2>{plot.name}</h2>
+                    <p className="crop-sub-detail">Planted: <strong>{new Date(plot.plantingDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</strong></p>
+                    <p className="crop-sub-detail">Variety: <strong>{plot.cropId === 'tomato' ? 'Rio Grande' : plot.cropId === 'maize' ? 'H614' : 'Sukuma'}</strong></p>
+                    <p className="crop-sub-detail">Stage: <strong>{stageLabel}</strong></p>
+                  </div>
+                </div>
+
+                <div className="crop-card-right">
+                  <div className="mini-circle-progress" style={{ background: `conic-gradient(#2e7d32 ${pct * 3.6}deg, #e5e7eb 0deg)` }}>
+                    <div className="mini-circle-inner">{pct}%</div>
+                  </div>
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+    </Page>
+  )
 }
