@@ -4106,7 +4106,9 @@ body, html, #root {
 
 /* =========================================================
    COMPREHENSIVE MOBILE RESPONSIVENESS OVERRIDES (320px - 768px)
+   Ensures seamless touch targets, popover sizing, and table scrolling across viewports.
    ========================================================= */
+
 
 @media (max-width: 600px) {
   .ai-floating-trigger-container {
