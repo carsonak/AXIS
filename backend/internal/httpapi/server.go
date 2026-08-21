@@ -176,14 +176,13 @@ func spaHandler(files fs.FS) http.Handler {
 	fileServer := http.FileServer(http.FS(files))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/")
-		if path == "" {
-			path = "index.html"
-		}
-		if info, err := fs.Stat(files, path); err == nil && !info.IsDir() {
-			clone := r.Clone(r.Context())
-			clone.URL.Path = "/" + path
-			fileServer.ServeHTTP(w, clone)
-			return
+		if path != "" && path != "index.html" {
+			if info, err := fs.Stat(files, path); err == nil && !info.IsDir() {
+				clone := r.Clone(r.Context())
+				clone.URL.Path = "/" + path
+				fileServer.ServeHTTP(w, clone)
+				return
+			}
 		}
 		data, err := fs.ReadFile(files, "index.html")
 		if err != nil {
