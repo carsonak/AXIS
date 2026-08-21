@@ -10,14 +10,15 @@ type HistoryFilter = 'all' | IrrigationEvent['source']
 
 export default function HistoryPage() {
   const { selectedPlot } = useAxis()
+  const selectedPlotID = selectedPlot?.id
   const [filter, setFilter] = useState<HistoryFilter>('all')
   const [events, setEvents] = useState<IrrigationEvent[]>([])
 
   useEffect(() => {
     setEvents([])
-    if (!selectedPlot) return
-    void repos.eventsForPlot(selectedPlot.id, '0000-01-01').then(setEvents)
-  }, [selectedPlot?.id])
+    if (!selectedPlotID) return
+    void repos.eventsForPlot(selectedPlotID, '0000-01-01').then(setEvents)
+  }, [selectedPlotID])
 
   if (!selectedPlot) {
     return <Page><AppHeader showBack eyebrow="Logs" title="Irrigation History" /><EmptyState title="Add a plot first" text="History is kept locally for each plot." action={<Link className="button primary" to="/app/plots/new">Add a plot</Link>} /></Page>

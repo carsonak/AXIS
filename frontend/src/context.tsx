@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getCatalog as fetchCatalog, getHealth, type HealthResponse } from './api'
 import { repos } from './db'
 import type { CatalogResponse, Plot, Settings } from './types'
@@ -17,7 +17,7 @@ export function AxisProvider({ children }: { children: ReactNode }) {
   const [settings, setSettingsState] = useState<Settings>({ id: 'app', areaUnit: 'acre', language: 'en' })
   const [health, setHealth] = useState<HealthResponse>()
 
-  async function reload() {
+  const reload = useCallback(async () => {
     const [savedSettings, localCatalog, localPlots] = await Promise.all([repos.getSettings(), repos.getCatalog(), repos.listPlots()])
     setSettingsState(savedSettings); setCatalog(localCatalog); setPlots(localPlots)
     if (navigator.onLine) {
@@ -26,20 +26,20 @@ export function AxisProvider({ children }: { children: ReactNode }) {
       if (remoteHealth.status === 'fulfilled') setHealth(remoteHealth.value)
     }
     setReady(true)
-  }
+  }, [])
 
-  useEffect(() => { void reload() }, [])
+  useEffect(() => { void reload() }, [reload])
   useEffect(() => {
     const handleOnline = () => { setOnline(true); void reload() }
     const handleOffline = () => setOnline(false)
     window.addEventListener('online', handleOnline); window.addEventListener('offline', handleOffline)
     return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline) }
-  }, [])
+  }, [reload])
 
-  async function selectPlot(id: string) { const next = { ...settings, selectedPlotId: id }; await repos.saveSettings(next); setSettingsState(next) }
-  async function saveSettings(next: Settings) { await repos.saveSettings(next); setSettingsState(next) }
+  const selectPlot = useCallback(async (id: string) => { const next = { ...settings, selectedPlotId: id }; await repos.saveSettings(next); setSettingsState(next) }, [settings])
+  const saveSettings = useCallback(async (next: Settings) => { await repos.saveSettings(next); setSettingsState(next) }, [])
   const selectedPlot = plots.find(plot => plot.id === settings.selectedPlotId) ?? plots[0]
-  const value = useMemo(() => ({ ready, online, catalog, plots, settings, selectedPlot, health, reload, selectPlot, saveSettings }), [ready, online, catalog, plots, settings, selectedPlot, health])
+  const value = useMemo(() => ({ ready, online, catalog, plots, settings, selectedPlot, health, reload, selectPlot, saveSettings }), [ready, online, catalog, plots, settings, selectedPlot, health, reload, selectPlot, saveSettings])
   return <AxisContext.Provider value={value}>{children}</AxisContext.Provider>
 }
 

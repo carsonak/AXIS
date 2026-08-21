@@ -7,15 +7,16 @@ import type { SoilMoistureReading } from '../types'
 
 export default function SoilMoisturePage() {
   const { selectedPlot } = useAxis()
+  const selectedPlotID = selectedPlot?.id
   const [reading, setReading] = useState<SoilMoistureReading>()
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     setLoaded(false)
     setReading(undefined)
-    if (!selectedPlot) { setLoaded(true); return }
-    void repos.latestSensorReading(selectedPlot.id).then(value => { setReading(value); setLoaded(true) })
-  }, [selectedPlot?.id])
+    if (!selectedPlotID) { setLoaded(true); return }
+    void repos.latestSensorReading(selectedPlotID).then(value => { setReading(value); setLoaded(true) })
+  }, [selectedPlotID])
 
   if (!selectedPlot) {
     return <Page><AppHeader showBack eyebrow="Soil" title="Soil Moisture" /><EmptyState title="Add a plot first" text="Soil moisture readings are tracked per plot." action={<Link className="button primary" to="/app/plots/new">Add a plot</Link>} /></Page>
