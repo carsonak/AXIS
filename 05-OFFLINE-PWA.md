@@ -1,13 +1,12 @@
 # Offline / PWA Strategy
 
-Owner: **Member 4**.
-
 Offline is a judged product feature, not a late browser optimization.
 
-## Current progress — 20 August 2026
+## Current implementation
 
 - ✅ Dexie repositories, local plot/recommendation/event/insight/sensor tables, seven-day queries, freshness helpers, and PWA production generation are implemented and pass typecheck/build.
-- 🟡 Today renders saved device data and refreshes online through the implemented data layer, but browser runtime and force-close/reopen behavior have not been verified on a physical phone.
+- ✅ Today, Weather, and Recommendations share an IndexedDB-first refresh coordinator. Existing advice refreshes hourly while `/app` is active and supports manual refresh.
+- 🟡 Browser timing, reconnect/resume, and force-close/reopen behavior have not been verified on a physical phone.
 - 🟡 Offline irrigation recording, history, chart, and manual flow-meter delta paths are implemented but still require the two prescribed device cycles.
 - ⬜ Home-screen installation, storage behavior on a second device, and deployed HTTPS service-worker behavior remain pending.
 - ⛔ There is no backend synchronization queue because farmer data intentionally remains device-local.
@@ -107,8 +106,8 @@ Every recommendation shows one status.
 
 | State | Suggested copy |
 |---|---|
-| Fresh online | “Updated just now” |
-| Saved today | “Saved earlier today — reconnect for the latest weather” |
+| Fresh online | “Refreshed just now” |
+| Saved today | Relative age such as “Refreshed 24 min ago” |
 | Older than today | “Saved from <date>. New rainfall is not included.” |
 | Climatology fallback | “Weather service unavailable. Using seasonal estimates — treat this as a rough guide.” |
 | Demo fixture | “Demo weather data” — only visible in developer/demo mode if desired |
@@ -134,20 +133,26 @@ P0 may show a friendly “Connect once to finish setup” message if the app/cat
 
 ## 6. Refresh behavior
 
-On:
+The application renders the last complete recommendation from IndexedDB before any network work. It does not automatically create the first recommendation.
 
-- app launch,
-- browser `online` event,
-- user pull-to-refresh / explicit refresh,
-- optionally once every 30–60 min while foregrounded,
+After a recommendation exists, the shared `/app` coordinator:
 
-attempt a new recommendation for the selected plot.
+- schedules refresh for one hour after `savedAt` while the app is active;
+- refreshes previous-day or hour-old advice when online;
+- rechecks stale advice after connectivity returns or the browser becomes visible/focused;
+- exposes manual refresh on Today and Weather;
+- prevents concurrent refresh requests and resets scheduling when the selected plot changes; and
+- stores weather and its deterministic recommendation together only after a successful response.
+
+Browser PWAs cannot guarantee hourly execution while fully closed, so AXIS makes no background-refresh claim.
 
 If the request fails:
 
 - keep local recommendation untouched,
 - display a non-blocking offline/stale message,
 - never blank the Today screen.
+
+After an automatic failure, retry on the next hourly check, reconnect/resume event, or manual request rather than looping immediately.
 
 ## 7. Why no sync queue in P0
 
@@ -159,7 +164,7 @@ Future production version can add an authenticated sync service behind the exist
 
 ## 8. Real-device test checklist
 
-Do this by H5, H10, H15 and H21.
+Record these checks explicitly; automated compilation does not prove them.
 
 - Load deployed AXIS once online.
 - Create/select plot and obtain recommendation.

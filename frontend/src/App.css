@@ -1430,6 +1430,38 @@ body, html, #root {
   margin-bottom: 12px;
 }
 
+.refresh-status-row,
+.weather-refresh-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.refresh-status-row {
+  margin-bottom: 10px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.weather-refresh-card > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.weather-refresh-card span,
+.weather-refresh-card small {
+  color: var(--text-muted);
+}
+
+@media (max-width: 460px) {
+  .weather-refresh-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
 .rec-card-body {
   display: flex;
   align-items: center;
@@ -4073,7 +4105,7 @@ body, html, #root {
 .ai-chat-card-floating {
   margin-bottom: 0;
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18), 0 4px 12px rgba(46, 125, 50, 0.15);
-  border: 1.5 solid #a5d6a7;
+  border: 1.5px solid #a5d6a7;
 }
 
 .ai-close-btn {
@@ -4200,6 +4232,5 @@ body, html, #root {
     border-radius: 50%;
   }
 }
-
 
 

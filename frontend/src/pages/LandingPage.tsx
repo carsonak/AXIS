@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { SketchWaterDrop, SketchCrop, SketchRain, SketchGear, SketchSun, SketchChart, SketchLock, SketchTarget, SketchMeter, SketchEdit } from '../components'
+import { SketchWaterDrop, SketchCrop, SketchRain, SketchGear, SketchSun, SketchChart, SketchLock } from '../components'
 
 type Page = 'home' | 'features' | 'workflow' | 'about' | 'contact' | 'privacy';
 
@@ -482,7 +482,7 @@ function ContactPage() {
           <div className="faq-item"><strong>Offline access</strong><p>After one online recommendation, saved advice and local irrigation records remain available offline.</p></div>
           <div className="faq-item"><strong>Flow-meter logging</strong><p>Farmers manually enter cumulative start and end readings; AXIS stores the validated difference.</p></div>
         </div>
-        <div className="info-faq-card">farm
+        <div className="info-faq-card">
           <h3>Not connected in this build</h3>
           <p>Support messaging, automatic sensor ingestion, user accounts, and cloud synchronization are intentionally not claimed by this prototype.</p>
         </div>

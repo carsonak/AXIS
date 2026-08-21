@@ -1,8 +1,7 @@
 import { Routes, Route, Outlet, Navigate } from 'react-router-dom';
 import { BottomNav, Spinner, AIChatAssistant, NetworkStatusDot } from './components';
 import { useAxis } from './context';
-
-
+import { RecommendationRefreshProvider, useRecommendationRefresh } from './recommendation-refresh';
 import LandingPage from './pages/LandingPage';
 import TodayPage from './pages/TodayPage';
 import PlotsPage from './pages/PlotsPage';
@@ -50,7 +49,16 @@ export default function App() {
 }
 
 function AppLayout() {
+  return (
+    <RecommendationRefreshProvider>
+      <AppLayoutContent />
+    </RecommendationRefreshProvider>
+  )
+}
+
+function AppLayoutContent() {
   const { online, selectedPlot, health } = useAxis()
+  const { recommendation, localReady } = useRecommendationRefresh()
 
   return (
     <div className="axis-app">
@@ -58,10 +66,14 @@ function AppLayout() {
         <Outlet />
       </main>
       <NetworkStatusDot online={online} />
-      <AIChatAssistant selectedPlot={selectedPlot} online={online} aiEnabled={health?.ai_insights_enabled} />
+      <AIChatAssistant
+        selectedPlot={selectedPlot}
+        recommendation={recommendation}
+        recommendationReady={localReady}
+        online={online}
+        aiEnabled={health?.ai_insights_enabled}
+      />
       <BottomNav />
     </div>
   );
 }
-
-

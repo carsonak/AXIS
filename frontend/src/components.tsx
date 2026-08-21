@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { useState, useEffect, type ReactNode, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type FormEvent } from 'react'
 import { createInsight, type InsightHistoryItem } from './api'
 import { repos } from './db'
 import type { Plot, Recommendation } from './types'
@@ -318,115 +318,143 @@ export interface ChatMessage {
   label?: string
 }
 
-export function AIChatAssistant({
-  recommendation: initialRec,
-  history: initialHistory = [],
-  selectedPlot,
-  online,
-  aiEnabled = true
-}: {
-  recommendation?: Recommendation
-  history?: InsightHistoryItem[]
-  selectedPlot?: Plot
-  online: boolean
-  aiEnabled?: boolean
-}) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [activeRec, setActiveRec] = useState<Recommendation | undefined>(initialRec)
-  const [historyItems, setHistoryItems] = useState<InsightHistoryItem[]>(initialHistory)
+function chatTime() {
+  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
 
-  useEffect(() => {
-    if (initialRec) {
-      setActiveRec(initialRec)
-      return
-    }
-    if (!selectedPlot) return
-    let active = true
-    void (async () => {
-      const [rec, events] = await Promise.all([
-        repos.latestRecommendation(selectedPlot.id),
-        repos.eventsForPlot(selectedPlot.id, dateDaysAgo(7))
+function initialChatMessages(plot?: Plot, language: 'en' | 'sw' = 'en'): ChatMessage[] {
+  const text = language === 'sw'
+    ? plot
+      ? `Unauliza kuhusu ${plot.name}. Nitatumia tu pendekezo lililohifadhiwa la shamba hili.`
+      : 'Chagua shamba ili AXIS iweze kueleza pendekezo lake lililohifadhiwa.'
+    : plot
+      ? `You are asking about ${plot.name}. I will use only this plot's saved AXIS recommendation.`
+      : 'Select a plot so AXIS can explain its saved recommendation.'
+  return [{ id: crypto.randomUUID(), sender: 'assistant', text, time: chatTime() }]
+}
 
-      ])
-      if (active) {
-        if (rec) setActiveRec(rec)
-        setHistoryItems(events.map(e => ({ date: e.date, recommended_litres: e.recommendedLitres ?? 0, applied_litres: e.litres })))
-      }
-    })()
-    return () => { active = false }
-  }, [initialRec, selectedPlot?.id])
-
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 'init-1',
-      sender: 'assistant',
-      text: activeRec
-        ? `Habari! I am your AXIS AI Assistant. Grounded in your deterministic advice (${activeRec.decision.litres} Litres for ${activeRec.crop_stage.display_name} stage). Ask me any question about your field!`
-        : 'Hello! I am your AXIS AI Assistant. Ask me any question about daily water demand, rainfall forecasts, or crop growth stages.',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      label: 'AI-Generated Explanation'
-    }
-  ])
-
-  const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [language, setLanguage] = useState<'en' | 'sw'>('en')
-
-  const suggestions = [
-    'Why did my water volume change today?',
-    'How did rain forecast affect my plot?',
-    'Explain crop growth stage water needs'
-  ]
-
-/**
- * Deterministically generates grounded agronomic explanations from local recommendations
- * when network is offline or AI server endpoint is disabled.
- */
-function generateGroundedFallback(query: string, rec?: Recommendation, lang: 'en' | 'sw' = 'en'): string {
-
+/** Generate an explanation from fields already present in a saved deterministic recommendation. */
+function generateGroundedFallback(
+  query: string,
+  rec: Recommendation | undefined,
+  plot: Plot | undefined,
+  recommendationReady: boolean,
+  language: 'en' | 'sw'
+): string {
+  if (!plot) {
+    return language === 'sw'
+      ? 'Chagua shamba kwanza ili AXIS iweze kutumia data sahihi ya umwagiliaji.'
+      : 'Select a plot first so AXIS can use the correct irrigation data.'
+  }
+  if (!recommendationReady) {
+    return language === 'sw'
+      ? `AXIS bado inafungua pendekezo lililohifadhiwa la ${plot.name}. Jaribu tena baada ya muda mfupi.`
+      : `AXIS is still opening the saved recommendation for ${plot.name}. Please try again in a moment.`
+  }
   if (!rec) {
-    return lang === 'sw'
-      ? 'Tafadhali chagua shamba kwenye dashibodi ili AI ionyeshe maelezo kulingana na vipimo vyako.'
-      : 'Please select an active plot on the dashboard so AXIS AI can ground its explanation in your exact plot data.'
+    return language === 'sw'
+      ? `${plot.name} haina pendekezo lililohifadhiwa. Unganisha intaneti na utengeneze pendekezo kwanza ili maelezo ya ndani yapatikane.`
+      : `${plot.name} has no saved recommendation. Connect and generate one first so local explanations are available.`
   }
 
   const q = query.toLowerCase()
   const litres = rec.decision.litres
   const minutes = rec.decision.duration_minutes
-  const rainAvoided = rec.decision.rain_adjustment_litres ?? 0
+  const rainAvoided = rec.decision.rain_adjustment_litres
   const stage = rec.crop_stage.display_name
   const age = rec.crop_stage.crop_age_days
   const rainForecast = rec.weather.rain_next_24h_mm
   const summary = rec.explanation.summary
 
   if (q.includes('rain') || q.includes('mvua')) {
-    if (rainAvoided > 0) {
-      return lang === 'sw'
-        ? `Utabiri wa mvua ni mm ${rainForecast}. AXIS imehesabu mkopo wa mvua na kuokoa Lita ${rainAvoided.toLocaleString()} za maji ("Maji yaliyoepukwa kwa sababu mvua ilizingatiwa").`
-        : `Forecast rainfall is ${rainForecast} mm. AXIS credited the forecast rain and saved ${rainAvoided.toLocaleString()} Litres of water ("Water avoided because rain was considered").`
-    } else {
-      return lang === 'sw'
-        ? `Utabiri wa mvua ni mm ${rainForecast}. Mvua iko chini ya kizingiti, kwa hivyo unahitaji Lita ${litres.toLocaleString()} za maji leo.`
-        : `Forecast rainfall is ${rainForecast} mm, which is below the credit threshold. Full daily requirement of ${litres.toLocaleString()} Litres is prescribed.`
-    }
+    return language === 'sw'
+      ? `Utabiri uliohifadhiwa ni mm ${rainForecast} za mvua. Pendekezo la AXIS linaonyesha Lita ${rainAvoided.toLocaleString()} za maji zilizoepukwa kwa sababu mvua ilizingatiwa, na hatua yake halali ni ${rec.decision.action}.`
+      : `The saved forecast is ${rainForecast} mm of rain. The AXIS recommendation records ${rainAvoided.toLocaleString()} litres as water avoided because rain was considered, and its authoritative action is ${rec.decision.action}.`
   }
 
-  if (q.includes('change') || q.includes('volume') || q.includes('badiliko') || q.includes('kiwango') || q.includes('why')) {
-    return lang === 'sw'
-      ? `Pendekezo la leo ni Lita ${litres.toLocaleString()}${minutes ? ` (${minutes} min)` : ''} kwa hatua ya ${stage}. ${summary}`
-      : `Today's recommendation is ${litres.toLocaleString()} Litres${minutes ? ` (${minutes} min runtime)` : ''} for the ${stage} stage. ${summary}`
+  if (q.includes('change') || q.includes('volume') || q.includes('badiliko') || q.includes('kiwango') || q.includes('why') || q.includes('kwa nini')) {
+    return language === 'sw'
+      ? `Pendekezo halali la leo ni Lita ${litres.toLocaleString()}${minutes !== undefined ? ` kwa dakika ${minutes}` : ''} katika hatua ya ${stage}. ${summary}`
+      : `Today's authoritative recommendation is ${litres.toLocaleString()} litres${minutes !== undefined ? ` for ${minutes} minutes` : ''} in the ${stage} stage. ${summary}`
   }
 
   if (q.includes('stage') || q.includes('crop') || q.includes('hatua') || q.includes('mmea')) {
-    return lang === 'sw'
-      ? `Mmea wako uko katika hatua ya ${stage} (Siku ya ${age}). Mahitaji ya maji yanahesabiwa kulingana na uvukizaji wa siku na ufanisi wa mfumo.`
-      : `Your crop is currently in the ${stage} growth stage (Day ${age}). Daily water replacement is calculated using crop evapotranspiration.`
+    return language === 'sw'
+      ? `Zao liko katika hatua ya ${stage}, siku ya ${age}. ${summary}`
+      : `The crop is in the ${stage} stage, at crop age day ${age}. ${summary}`
   }
 
-  return lang === 'sw'
-    ? `${summary} Kipimo halisi cha leo ni Lita ${litres.toLocaleString()}.`
-    : `${summary} Prescribed application for today is ${litres.toLocaleString()} Litres.`
+  return language === 'sw'
+    ? `${summary} Kiasi halali kilichohifadhiwa leo ni Lita ${litres.toLocaleString()} na hatua ni ${rec.decision.action}.`
+    : `${summary} The saved authoritative application is ${litres.toLocaleString()} litres and the action is ${rec.decision.action}.`
 }
+
+export function AIChatAssistant({
+  recommendation,
+  recommendationReady,
+  selectedPlot,
+  online,
+  aiEnabled
+}: {
+  recommendation?: Recommendation
+  recommendationReady: boolean
+  selectedPlot?: Plot
+  online: boolean
+  aiEnabled?: boolean
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [historyItems, setHistoryItems] = useState<InsightHistoryItem[]>([])
+  const [historyPlotID, setHistoryPlotID] = useState<string>()
+  const [messages, setMessages] = useState<ChatMessage[]>(() => initialChatMessages(selectedPlot))
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [language, setLanguage] = useState<'en' | 'sw'>('en')
+  const contextGenerationRef = useRef(0)
+  const previousPlotIDRef = useRef(selectedPlot?.id)
+  const selectedPlotIDRef = useRef(selectedPlot?.id)
+  const languageRef = useRef(language)
+
+  selectedPlotIDRef.current = selectedPlot?.id
+  languageRef.current = language
+  if (previousPlotIDRef.current !== selectedPlot?.id) {
+    previousPlotIDRef.current = selectedPlot?.id
+    contextGenerationRef.current += 1
+  }
+
+  useEffect(() => {
+    const plot = selectedPlot
+    const generation = contextGenerationRef.current
+    let cancelled = false
+    setHistoryItems([])
+    setHistoryPlotID(undefined)
+    setMessages(initialChatMessages(plot, languageRef.current))
+    setInput('')
+    setLoading(false)
+    if (!plot) return () => { cancelled = true }
+
+    void Promise.all([
+      repos.recommendationsForPlot(plot.id, dateDaysAgo(7)),
+      repos.eventsForPlot(plot.id, dateDaysAgo(7))
+    ]).then(([recommendations, events]) => {
+      if (cancelled || contextGenerationRef.current !== generation || selectedPlotIDRef.current !== plot.id) return
+      setHistoryItems(recommendations.slice(0, 7).map(rec => ({
+        date: rec.date,
+        recommended_litres: rec.decision.litres_exact,
+        applied_litres: events.find(event => event.date === rec.date)?.litres,
+        rain_adjustment_litres: rec.decision.rain_adjustment_litres
+      })))
+      setHistoryPlotID(plot.id)
+    }).catch(() => {
+      if (cancelled || contextGenerationRef.current !== generation || selectedPlotIDRef.current !== plot.id) return
+      setHistoryItems([])
+      setHistoryPlotID(plot.id)
+    })
+    return () => { cancelled = true }
+  }, [selectedPlot])
+
+  const suggestions = language === 'sw'
+    ? ['Kwa nini kiasi cha maji kilibadilika leo?', 'Utabiri wa mvua uliathirije shamba?', 'Eleza mahitaji ya hatua ya ukuaji']
+    : ['Why did my water volume change today?', 'How did rain forecast affect my plot?', 'Explain crop growth stage water needs']
 
   async function handleSend(textToSend?: string) {
     const query = (textToSend || input).trim()
@@ -436,47 +464,54 @@ function generateGroundedFallback(query: string, rec?: Recommendation, lang: 'en
       id: crypto.randomUUID(),
       sender: 'user',
       text: query,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      time: chatTime()
     }
 
     setMessages(prev => [...prev, userMsg])
     if (!textToSend) setInput('')
     setLoading(true)
+    const generation = contextGenerationRef.current
+    const plotID = selectedPlot?.id
+    const currentRecommendation = recommendation?.plot_id === plotID ? recommendation : undefined
+    const currentHistory = historyPlotID === plotID ? historyItems : []
+
+    const stillCurrent = () => contextGenerationRef.current === generation && selectedPlotIDRef.current === plotID
 
     try {
-      if (online && activeRec) {
+      if (online && aiEnabled === true && currentRecommendation) {
         try {
-          const response = await createInsight(activeRec, historyItems, language)
+          const response = await createInsight(query, currentRecommendation, currentHistory, language)
+          if (!stillCurrent()) return
           setMessages(prev => [
             ...prev,
             {
               id: crypto.randomUUID(),
               sender: 'assistant',
               text: `${response.summary} ${response.observations.length > 0 ? ' • ' + response.observations.join(' ') : ''}`,
-              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              label: response.label || 'AI-Generated Explanation'
+              time: chatTime(),
+              label: 'AI-generated explanation'
             }
           ])
           return
         } catch {
-          // Server AI endpoint disabled or offline -> fallback to grounded agronomic explanation
+          // The deterministic local path remains available when the optional provider fails.
         }
       }
 
-      // Grounded Agronomic Fallback Explanation
-      const fallbackText = generateGroundedFallback(query, activeRec, language)
+      if (!stillCurrent()) return
+      const fallbackText = generateGroundedFallback(query, currentRecommendation, selectedPlot, recommendationReady, language)
       setMessages(prev => [
         ...prev,
         {
           id: crypto.randomUUID(),
           sender: 'assistant',
           text: fallbackText,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          label: online ? 'AI-Generated Explanation' : 'Grounded Offline Summary'
+          time: chatTime(),
+          label: online ? 'Grounded local explanation' : 'Grounded offline explanation'
         }
       ])
     } finally {
-      setLoading(false)
+      if (stillCurrent()) setLoading(false)
     }
   }
 
@@ -543,9 +578,11 @@ function generateGroundedFallback(query: string, rec?: Recommendation, lang: 'en
           </div>
         </div>
 
-        {!online && (
+        {(!online || aiEnabled !== true) && (
           <div className="offline-ai-banner">
-            <span>⚡ Network Offline — Connect to internet to ask live AI questions.</span>
+            <span>{!online
+              ? 'Saved local explanations are available offline. Live AI requires connectivity.'
+              : 'Live AI is unavailable. Grounded local explanations remain available.'}</span>
           </div>
         )}
 
@@ -571,13 +608,13 @@ function generateGroundedFallback(query: string, rec?: Recommendation, lang: 'en
         </div>
 
         <div className="ai-suggest-chips">
-          <span className="chips-label">Quick Questions:</span>
-          {suggestions.map((chip, idx) => (
+          <span className="chips-label">{language === 'sw' ? 'Maswali ya haraka:' : 'Quick questions:'}</span>
+          {suggestions.map(chip => (
             <button
-              key={idx}
+              key={chip}
               type="button"
               className="suggest-chip-btn"
-              disabled={loading || !online}
+              disabled={loading}
               onClick={() => void handleSend(chip)}
             >
               💬 {chip}
@@ -589,21 +626,22 @@ function generateGroundedFallback(query: string, rec?: Recommendation, lang: 'en
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder={online ? 'Ask AXIS AI a question...' : 'Offline — connect to chat'}
-            disabled={loading || !online}
+            placeholder={!online
+              ? 'Ask about the saved recommendation…'
+              : aiEnabled === true
+                ? 'Ask AXIS a question…'
+                : 'Ask for a grounded local explanation…'}
+            disabled={loading}
           />
-          <button type="submit" className="button primary compact" disabled={loading || !online || !input.trim()}>
+          <button type="submit" className="button primary compact" disabled={loading || !input.trim()}>
             {loading ? 'Thinking...' : 'Send'}
           </button>
         </form>
 
         <p className="ai-disclaimer-footer">
-          Deterministic advice is authoritative. AI explanations are non-binding summaries.
+          The deterministic AXIS recommendation is authoritative. Explanations never change its litres, runtime, or action.
         </p>
       </Card>
     </div>
   )
 }
-
-
-

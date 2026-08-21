@@ -1,26 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Alert, AppHeader, Badge, Card, EmptyState, Modal, Page, Spinner, SketchWaterDrop, SketchRain } from '../components'
 
 import { useAxis } from '../context'
 import { repos } from '../db'
+import { useRecommendationRefresh } from '../recommendation-refresh'
 import { measuredLitres } from '../sensors'
 import type { IrrigationEvent, StoredRecommendation } from '../types'
 import { formatLitres, formatWindow, freshness, nairobiDate } from '../utils'
 
 export default function RecommendationsPage() {
   const { selectedPlot, catalog, online } = useAxis()
+  const { recommendation, localReady: loaded, now } = useRecommendationRefresh()
   const navigate = useNavigate()
-  const [recommendation, setRecommendation] = useState<StoredRecommendation>()
-  const [loaded, setLoaded] = useState(false)
   const [showLogModal, setShowLogModal] = useState(false)
-
-  useEffect(() => {
-    setLoaded(false)
-    setRecommendation(undefined)
-    if (!selectedPlot) { setLoaded(true); return }
-    void repos.latestRecommendation(selectedPlot.id).then(value => { setRecommendation(value); setLoaded(true) })
-  }, [selectedPlot?.id])
 
   if (!selectedPlot) {
     return (
@@ -49,7 +42,7 @@ export default function RecommendationsPage() {
 
   const method = catalog?.irrigation_methods.find(item => item.id === selectedPlot.irrigationMethodId)
   const acres = (selectedPlot.areaM2 / 4046.8564224).toFixed(1)
-  const status = freshness(recommendation)
+  const status = freshness(recommendation, now)
 
   return (
     <Page>

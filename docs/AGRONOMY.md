@@ -2,7 +2,7 @@
 
 The implemented engine follows the calculation and simplification rules in `04-ENGINE-AND-CROP-STAGES.md`.
 
-**Progress — 20 August 2026:** ✅ the deterministic rules and golden fixture are covered by automated tests; 🟡 coefficients and demo outputs still need a second human agronomic review; ⛔ sensor adjustment remains inactive.
+**Current status:** ✅ the deterministic rules and golden fixture are covered by automated tests; ✅ provider ET₀ is accepted only within the engine's plausible range; 🟡 coefficients and demo outputs still need a second human agronomic review; ⛔ sensor adjustment remains inactive.
 
 - Crop coefficients and stage durations come from the versioned `crops.json` catalog.
 - Reference ETo uses a provider value only when it is present and plausible; otherwise AXIS computes Hargreaves ETo from daily minimum/maximum temperature, latitude and day of year.
