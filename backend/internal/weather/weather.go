@@ -46,7 +46,7 @@ func NewKijani(endpoint, apiKey string) *KijaniProvider {
 	return &KijaniProvider{Endpoint: endpoint, APIKey: apiKey, Client: &http.Client{Timeout: 3 * time.Second}}
 }
 
-func (p *KijaniProvider) Daily(ctx context.Context, lat, lon float64, _ time.Time) (domain.WeatherSnapshot, error) {
+func (p *KijaniProvider) Daily(ctx context.Context, lat, lon float64, requestedAt time.Time) (domain.WeatherSnapshot, error) {
 	if p.APIKey == "" {
 		return domain.WeatherSnapshot{}, errors.New("KIJANISPACE_API_KEY is not configured")
 	}
@@ -63,17 +63,12 @@ func (p *KijaniProvider) Daily(ctx context.Context, lat, lon float64, _ time.Tim
 		return domain.WeatherSnapshot{}, err
 	}
 	req.Header.Set("Accept", "application/json")
-	if strings.Contains(p.APIKey, ":") {
-		parts := strings.SplitN(p.APIKey, ":", 2)
-		req.SetBasicAuth(parts[0], parts[1])
-	} else if strings.HasPrefix(p.APIKey, "Basic ") {
+	if strings.HasPrefix(p.APIKey, "Basic ") {
 		req.Header.Set("Authorization", p.APIKey)
 	} else if strings.HasPrefix(p.APIKey, "Bearer ") {
 		req.Header.Set("Authorization", p.APIKey)
-		req.Header.Set("X-API-Key", strings.TrimPrefix(p.APIKey, "Bearer "))
-	} else if p.APIKey == "YWRtaW46c2VjcmV0" {
-		req.Header.Set("Authorization", "Basic "+p.APIKey)
-		req.Header.Set("X-API-Key", p.APIKey)
+	} else if parts := strings.SplitN(p.APIKey, ":", 2); len(parts) == 2 {
+		req.SetBasicAuth(parts[0], parts[1])
 	} else {
 		req.Header.Set("Authorization", "Bearer "+p.APIKey)
 		req.Header.Set("X-API-Key", p.APIKey)
@@ -91,48 +86,47 @@ func (p *KijaniProvider) Daily(ctx context.Context, lat, lon float64, _ time.Tim
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&raw); err != nil {
 		return domain.WeatherSnapshot{}, fmt.Errorf("decode KijaniSpace response: %w", err)
 	}
-	return mapKijani(raw)
+	return mapKijani(raw, requestedAt)
 }
 
-func mapKijani(raw any) (domain.WeatherSnapshot, error) {
+func mapKijani(raw any, requestedAt time.Time) (domain.WeatherSnapshot, error) {
 	// Check for hourly forecast arrays (meteoblue / Kijani standard format)
 	tArr, okTArr := findNumberArray(raw, "temperature", "temp")
 	rArr, okRArr := findNumberArray(raw, "precipitation", "precipitation_mm", "rain", "rainfall", "rain_mm")
-	if okTArr && okRArr && len(tArr) > 0 && len(rArr) > 0 {
-		n := min(24, len(tArr))
-		tMin := minSlice(tArr[:n])
-		tMax := maxSlice(tArr[:n])
-		rn := min(24, len(rArr))
-		rain := math.Max(0, sumSlice(rArr[:rn]))
+	times, okTimes := findStringArray(raw, "time")
+	if okTArr && okRArr && okTimes && len(tArr) > 0 && len(rArr) > 0 && len(times) > 0 {
+		location := kijaniLocation(raw, requestedAt.Location())
+		start, end, err := forecastWindow(times, requestedAt, location, len(tArr), len(rArr))
+		if err != nil {
+			return domain.WeatherSnapshot{}, err
+		}
+		tMin := minSlice(tArr[start:end])
+		tMax := maxSlice(tArr[start:end])
+		rain := math.Max(0, sumSlice(rArr[start:end]))
 
 		result := domain.WeatherSnapshot{Source: "KIJANISPACE", TMinC: tMin, TMaxC: tMax, RainNext24HMM: rain}
-		if pArr, ok := findNumberArray(raw, "precipitation_probability", "probability_of_precipitation", "pop", "rain_probability"); ok && len(pArr) > 0 {
-			pn := min(24, len(pArr))
-			maxP := maxSlice(pArr[:pn])
+		if pArr, ok := findNumberArray(raw, "precipitation_probability", "probability_of_precipitation", "pop", "rain_probability"); ok && len(pArr) >= end {
+			maxP := maxSlice(pArr[start:end])
 			if maxP > 1 {
 				maxP /= 100
 			}
 			maxP = math.Max(0, math.Min(1, maxP))
 			result.RainProbability = &maxP
 		}
-		if wArr, ok := findNumberArray(raw, "windspeed", "wind_speed", "wind_ms"); ok && len(wArr) > 0 {
-			wn := min(24, len(wArr))
-			meanW := meanSlice(wArr[:wn])
+		if wArr, ok := findNumberArray(raw, "windspeed", "wind_speed", "wind_ms"); ok && len(wArr) >= end {
+			meanW := meanSlice(wArr[start:end])
 			result.WindMS = &meanW
 		}
-		if eArr, ok := findNumberArray(raw, "potentialevapotranspiration", "evapotranspiration", "et0_mm", "eto"); ok && len(eArr) > 0 {
-			en := min(24, len(eArr))
-			sumE := sumSlice(eArr[:en])
+		if eArr, ok := findNumberArray(raw, "potentialevapotranspiration", "evapotranspiration", "et0_mm", "eto"); ok && len(eArr) >= end {
+			sumE := sumSlice(eArr[start:end])
 			if sumE >= 0 {
 				result.ET0MM = &sumE
 				result.ET0Method = "PROVIDER"
 			}
 		}
 		observed := time.Now().UTC().Format(time.RFC3339)
-		if value, ok := findString(raw, "model_run", "provider_observed_at", "observed_at", "timestamp", "time"); ok {
-			if parsed, err := time.Parse("2006-01-02 15:04", value); err == nil {
-				observed = parsed.UTC().Format(time.RFC3339)
-			} else if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+		if value, ok := findString(raw, "model_run", "provider_observed_at", "observed_at", "timestamp"); ok {
+			if parsed, err := parseKijaniTime(value, location); err == nil {
 				observed = parsed.UTC().Format(time.RFC3339)
 			}
 		}
@@ -164,7 +158,7 @@ func mapKijani(raw any) (domain.WeatherSnapshot, error) {
 	}
 	observed := time.Now().UTC().Format(time.RFC3339)
 	if value, ok := findString(raw, "provider_observed_at", "observed_at", "timestamp", "time"); ok {
-		if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+		if parsed, err := parseKijaniTime(value, kijaniLocation(raw, requestedAt.Location())); err == nil {
 			observed = parsed.UTC().Format(time.RFC3339)
 		}
 	}
@@ -172,17 +166,74 @@ func mapKijani(raw any) (domain.WeatherSnapshot, error) {
 	return result, nil
 }
 
-func findNumberArray(value any, aliases ...string) ([]float64, bool) {
-	wanted := make(map[string]bool, len(aliases))
-	for _, alias := range aliases {
-		wanted[normalize(alias)] = true
+func forecastWindow(times []string, requestedAt time.Time, location *time.Location, requiredLengths ...int) (int, int, error) {
+	start := -1
+	for index, value := range times {
+		parsed, err := parseKijaniTime(value, location)
+		if err != nil {
+			return 0, 0, fmt.Errorf("parse KijaniSpace forecast time %q: %w", value, err)
+		}
+		if start < 0 && !parsed.Before(requestedAt) {
+			start = index
+		}
 	}
+	if start < 0 {
+		return 0, 0, errors.New("KijaniSpace forecast has no sample at or after the requested time")
+	}
+	end := min(start+24, len(times))
+	for _, length := range requiredLengths {
+		end = min(end, length)
+	}
+	if end <= start {
+		return 0, 0, errors.New("KijaniSpace forecast arrays have no aligned samples at the requested time")
+	}
+	return start, end, nil
+}
+
+func kijaniLocation(raw any, fallback *time.Location) *time.Location {
+	if fallback == nil {
+		fallback = time.UTC
+	}
+	value, ok := findString(raw, "timezone")
+	if !ok {
+		return fallback
+	}
+	switch strings.ToUpper(strings.TrimSpace(value)) {
+	case "EAT":
+		return time.FixedZone("EAT", 3*60*60)
+	case "UTC", "GMT":
+		return time.UTC
+	default:
+		return fallback
+	}
+}
+
+func parseKijaniTime(value string, location *time.Location) (time.Time, error) {
+	if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+		return parsed, nil
+	}
+	if location == nil {
+		location = time.UTC
+	}
+	return time.ParseInLocation("2006-01-02 15:04", value, location)
+}
+
+func findNumberArray(value any, aliases ...string) ([]float64, bool) {
+	for _, alias := range aliases {
+		if result, ok := findNumberArrayAlias(value, normalize(alias)); ok {
+			return result, true
+		}
+	}
+	return nil, false
+}
+
+func findNumberArrayAlias(value any, wanted string) ([]float64, bool) {
 	var walk func(any) ([]float64, bool)
 	walk = func(current any) ([]float64, bool) {
 		switch typed := current.(type) {
 		case map[string]any:
 			for key, item := range typed {
-				if wanted[normalize(key)] {
+				if wanted == normalize(key) {
 					if arr, ok := toFloatSlice(item); ok && len(arr) > 0 {
 						return arr, true
 					}
@@ -197,6 +248,49 @@ func findNumberArray(value any, aliases ...string) ([]float64, bool) {
 		return nil, false
 	}
 	return walk(value)
+}
+
+func findStringArray(value any, aliases ...string) ([]string, bool) {
+	wanted := make(map[string]bool, len(aliases))
+	for _, alias := range aliases {
+		wanted[normalize(alias)] = true
+	}
+	var walk func(any) ([]string, bool)
+	walk = func(current any) ([]string, bool) {
+		switch typed := current.(type) {
+		case map[string]any:
+			for key, item := range typed {
+				if wanted[normalize(key)] {
+					if arr, ok := toStringSlice(item); ok && len(arr) > 0 {
+						return arr, true
+					}
+				}
+			}
+			for _, item := range typed {
+				if result, ok := walk(item); ok {
+					return result, true
+				}
+			}
+		}
+		return nil, false
+	}
+	return walk(value)
+}
+
+func toStringSlice(value any) ([]string, bool) {
+	items, ok := value.([]any)
+	if !ok {
+		return nil, false
+	}
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		text, ok := item.(string)
+		if !ok {
+			return nil, false
+		}
+		result = append(result, text)
+	}
+	return result, true
 }
 
 func toFloatSlice(value any) ([]float64, bool) {
@@ -304,16 +398,21 @@ func findNumber(value any, aliases ...string) (float64, bool) {
 }
 
 func findString(value any, aliases ...string) (string, bool) {
-	wanted := make(map[string]bool, len(aliases))
 	for _, alias := range aliases {
-		wanted[normalize(alias)] = true
+		if result, ok := findStringAlias(value, normalize(alias)); ok {
+			return result, true
+		}
 	}
+	return "", false
+}
+
+func findStringAlias(value any, wanted string) (string, bool) {
 	var walk func(any) (string, bool)
 	walk = func(current any) (string, bool) {
 		switch typed := current.(type) {
 		case map[string]any:
 			for key, item := range typed {
-				if wanted[normalize(key)] {
+				if wanted == normalize(key) {
 					if s, ok := item.(string); ok {
 						return s, true
 					}

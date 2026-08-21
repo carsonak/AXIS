@@ -3,6 +3,9 @@ package weather
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,7 +15,7 @@ import (
 
 func TestFlexibleKijaniMapping(t *testing.T) {
 	raw := map[string]any{"forecast": []any{map[string]any{"temp_min": 17.4, "temp_max": 28.8, "precipitation_mm": 4.0, "pop": 55.0, "wind_speed": 2.3}}}
-	value, err := mapKijani(raw)
+	value, err := mapKijani(raw, time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +36,8 @@ func TestRealKijaniLivePayloadMapping(t *testing.T) {
 	if err := json.Unmarshal(b, &raw); err != nil {
 		t.Fatal(err)
 	}
-	value, err := mapKijani(raw)
+	requestedAt := time.Date(2026, 8, 21, 17, 0, 0, 0, time.FixedZone("EAT", 3*60*60))
+	value, err := mapKijani(raw, requestedAt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,6 +59,164 @@ func TestRealKijaniLivePayloadMapping(t *testing.T) {
 	if value.WindMS == nil || *value.WindMS <= 0 {
 		t.Fatalf("bad wind: %+v", value.WindMS)
 	}
+	if value.ProviderObservedAt == nil || *value.ProviderObservedAt != "2026-08-21T10:08:00Z" {
+		t.Fatalf("bad provider timestamp: %v", stringValue(value.ProviderObservedAt))
+	}
+}
+
+func TestKijaniRollingForecastWindow(t *testing.T) {
+	raw := hourlyPayload(40, "EAT")
+	requestedAt := time.Date(2026, 8, 21, 6, 30, 0, 0, time.FixedZone("EAT", 3*60*60))
+	value, err := mapKijani(raw, requestedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.TMinC != 7 || value.TMaxC != 30 {
+		t.Fatalf("temperature window = %.1f..%.1f, want 7..30", value.TMinC, value.TMaxC)
+	}
+	if value.RainNext24HMM != 444 {
+		t.Fatalf("rain = %.1f, want 444", value.RainNext24HMM)
+	}
+	if value.ET0MM == nil || mathAbs(*value.ET0MM-44.4) > 1e-9 {
+		t.Fatalf("ET0 = %+v, want 44.4", value.ET0MM)
+	}
+	if value.RainProbability == nil || *value.RainProbability != .3 {
+		t.Fatalf("probability = %+v, want 0.3", value.RainProbability)
+	}
+	if value.WindMS == nil || *value.WindMS != 18.5 {
+		t.Fatalf("wind = %+v, want 18.5", value.WindMS)
+	}
+}
+
+func TestKijaniRollingForecastWindowNearEnd(t *testing.T) {
+	raw := hourlyPayload(40, "EAT")
+	requestedAt := time.Date(2026, 8, 22, 14, 0, 0, 0, time.FixedZone("EAT", 3*60*60))
+	value, err := mapKijani(raw, requestedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.TMinC != 38 || value.TMaxC != 39 || value.RainNext24HMM != 77 {
+		t.Fatalf("unexpected near-end window: %+v", value)
+	}
+}
+
+func TestKijaniOptionalArraysMustCoverAlignedWindow(t *testing.T) {
+	raw := hourlyPayload(40, "EAT")
+	raw["forecast_data"].(map[string]any)["windspeed"] = []any{1.0, 2.0, 3.0}
+	requestedAt := time.Date(2026, 8, 21, 7, 0, 0, 0, time.FixedZone("EAT", 3*60*60))
+	value, err := mapKijani(raw, requestedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.WindMS != nil {
+		t.Fatalf("short optional wind array should be omitted, got %+v", value.WindMS)
+	}
+	if value.ET0MM == nil {
+		t.Fatal("aligned ET0 array should still be aggregated")
+	}
+}
+
+func TestKijaniTimestampFallsBackToRequestLocation(t *testing.T) {
+	raw := hourlyPayload(2, "Unsupported/Zone")
+	requestedAt := time.Date(2026, 8, 21, 0, 0, 0, 0, time.FixedZone("request-zone", 2*60*60))
+	value, err := mapKijani(raw, requestedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.ProviderObservedAt == nil || *value.ProviderObservedAt != "2026-08-21T11:08:00Z" {
+		t.Fatalf("provider timestamp = %+v, want 2026-08-21T11:08:00Z", value.ProviderObservedAt)
+	}
+}
+
+func TestKijaniAuthentication(t *testing.T) {
+	tests := []struct {
+		name          string
+		key           string
+		authorization string
+		apiKey        string
+		username      string
+		password      string
+	}{
+		{name: "username and password", key: "farmer:passphrase", username: "farmer", password: "passphrase"},
+		{name: "prefixed basic", key: "Basic c2FtcGxl", authorization: "Basic c2FtcGxl"},
+		{name: "prefixed bearer", key: "Bearer sample:token", authorization: "Bearer sample:token"},
+		{name: "unprefixed token", key: "sample-token", authorization: "Bearer sample-token", apiKey: "sample-token"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			provider := NewKijani("https://weather.example.test/land", test.key)
+			provider.Client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if test.username != "" {
+					username, password, ok := r.BasicAuth()
+					if !ok || username != test.username || password != test.password {
+						t.Errorf("basic auth = %q/%q/%v", username, password, ok)
+					}
+				} else if got := r.Header.Get("Authorization"); got != test.authorization {
+					t.Errorf("Authorization = %q, want %q", got, test.authorization)
+				}
+				if got := r.Header.Get("X-API-Key"); got != test.apiKey {
+					t.Errorf("X-API-Key = %q, want %q", got, test.apiKey)
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Status:     "200 OK",
+					Body:       io.NopCloser(strings.NewReader(`{"t_min_c":17,"t_max_c":28,"rain_next_24h_mm":2,"provider_observed_at":"2026-08-21T10:08:00Z"}`)),
+					Header:     make(http.Header),
+					Request:    r,
+				}, nil
+			})}
+			if _, err := provider.Daily(context.Background(), -.0917, 34.768, time.Date(2026, 8, 21, 17, 0, 0, 0, time.UTC)); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return fn(request)
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return "<nil>"
+	}
+	return *value
+}
+
+func hourlyPayload(length int, timezone string) map[string]any {
+	times := make([]any, length)
+	temperature := make([]any, length)
+	precipitation := make([]any, length)
+	probability := make([]any, length)
+	windspeed := make([]any, length)
+	et0 := make([]any, length)
+	start := time.Date(2026, 8, 21, 0, 0, 0, 0, time.UTC)
+	for index := range length {
+		times[index] = start.Add(time.Duration(index) * time.Hour).Format("2006-01-02 15:04")
+		temperature[index] = float64(index)
+		precipitation[index] = float64(index)
+		probability[index] = float64(index)
+		windspeed[index] = float64(index)
+		et0[index] = float64(index) / 10
+	}
+	return map[string]any{
+		"location":      map[string]any{"timezone": timezone},
+		"forecast_info": map[string]any{"model_run": "2026-08-21 13:08"},
+		"forecast_data": map[string]any{
+			"time": times, "temperature": temperature, "precipitation": precipitation,
+			"precipitation_probability": probability, "windspeed": windspeed,
+			"potentialevapotranspiration": et0,
+		},
+	}
+}
+
+func mathAbs(value float64) float64 {
+	if value < 0 {
+		return -value
+	}
+	return value
 }
 
 func TestClimatologyUsesSpecificRegionFirst(t *testing.T) {
