@@ -82,7 +82,11 @@ func (s *Server) recommendation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "INVALID_WEATHER_INPUT", "No weather provider is configured.", "")
 		return
 	}
-	snapshot, err := s.Weather.Daily(r.Context(), input.Plot.Lat, input.Plot.Lon, date)
+	weatherTime := date
+	if s.WeatherMode == "live" {
+		weatherTime = localNow
+	}
+	snapshot, err := s.Weather.Daily(r.Context(), input.Plot.Lat, input.Plot.Lon, weatherTime)
 	if err != nil {
 		s.logger().Warn("weather providers failed", "error", err)
 		writeError(w, http.StatusUnprocessableEntity, "INVALID_WEATHER_INPUT", "Weather is unavailable for this location.", "plot.location")

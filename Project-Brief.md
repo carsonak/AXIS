@@ -1,12 +1,14 @@
 # AXIS — Agricultural Excellence in Irrigation Schemes
 
+> This is the original product brief. For the current implementation and verification state, start with [`README.md`](README.md) and [`docs/TEAM-HANDOFF.md`](docs/TEAM-HANDOFF.md).
+
 ## Smart Irrigation Advisory for Smallholder Farmers
 
 ## In one sentence
 
 We are building an **offline-friendly farming assistant that tells a farmer how much water their crop needs today**, using information about their farm, crop and upcoming weather.
 
-> **Implementation status — 20 August 2026:** The deterministic engine, API, offline-oriented PWA, local history, and fallback paths are implemented and pass automated checks. Live Kijani validation, container/deployment checks, and physical-phone offline testing remain pending. AI and sensor adjustment are bonus features and remain safely gated.
+> **Implementation status:** The deterministic engine, API, offline-oriented PWA, local history, rolling Kijani integration, refresh controls, and fallback paths are implemented. Automated, live-payload, and container evidence is recorded separately from outstanding deployment and physical-device acceptance. AI and sensor adjustment remain safely gated.
 
 ---
 
