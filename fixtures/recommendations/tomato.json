@@ -13,6 +13,9 @@
     "action": "REDUCED",
     "litres": 2400,
     "litres_exact": 2424.6,
+    "daily_target_litres": 2400,
+    "daily_target_litres_exact": 2424.6,
+    "applied_today_litres": 0,
     "gross_depth_mm": 2.4,
     "modeled_gross_depth_before_threshold_mm": 2.4,
     "duration_minutes": 55,
@@ -31,7 +34,7 @@
     "et0_method": "HARGREAVES"
   },
   "explanation": {
-    "summary": "AXIS estimates daily crop water use, subtracts qualifying forecast rain, adjusts for irrigation efficiency, and converts the result to litres.",
+    "summary": "AXIS calculates today's crop-water target from weather, crop stage, area, and irrigation efficiency, then subtracts water already logged today to show the remaining amount.",
     "steps": [
       {"key":"et0","label":"Weather water demand","value":4.66,"unit":"mm"},
       {"key":"kc","label":"Crop factor","value":1.15,"unit":""},
@@ -40,7 +43,9 @@
       {"key":"efficiency","label":"Drip efficiency","value":90,"unit":"%"},
       {"key":"area","label":"Plot area","value":1011.7,"unit":"m²"},
       {"key":"baseline","label":"Without forecast rain","value":6021.8,"unit":"L"},
-      {"key":"litres","label":"Water to apply","value":2424.6,"unit":"L"}
+      {"key":"daily_target","label":"Today's adjusted target","value":2424.6,"unit":"L"},
+      {"key":"applied_today","label":"Already irrigated today","value":0,"unit":"L"},
+      {"key":"litres","label":"Remaining amount to apply","value":2424.6,"unit":"L"}
     ]
   },
   "confidence": {"level":"LOW","reasons":["Deterministic demo weather"]},

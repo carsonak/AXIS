@@ -130,6 +130,13 @@ components:
           type: string
           format: date
           description: Optional Nairobi-local planning date. Defaults to today.
+        applied_today_litres:
+          type: number
+          minimum: 0
+          default: 0
+          description: Sum of device-local irrigation events for this plot and Nairobi-local date.
+        irrigation_context:
+          $ref: '#/components/schemas/IrrigationContext'
         previous_recommendation:
           $ref: '#/components/schemas/PreviousRecommendation'
 
@@ -213,6 +220,22 @@ components:
           exclusiveMinimum: true
           minimum: 0
 
+    IrrigationContext:
+      type: object
+      required: [logged_at, litres]
+      description: Optional factual context used only to corroborate sensor response; it never adjusts litres.
+      properties:
+        logged_at:
+          type: string
+          format: date-time
+        litres:
+          type: number
+          minimum: 0
+        sensor_before:
+          $ref: '#/components/schemas/SoilMoistureObservation'
+        sensor_after:
+          $ref: '#/components/schemas/SoilMoistureObservation'
+
     PreviousRecommendation:
       type: object
       required: [date, litres_exact]
@@ -221,6 +244,9 @@ components:
           type: string
           format: date
         litres_exact:
+          type: number
+          minimum: 0
+        daily_target_litres_exact:
           type: number
           minimum: 0
         et0_mm:
@@ -383,6 +409,9 @@ components:
         - action
         - litres
         - litres_exact
+        - daily_target_litres
+        - daily_target_litres_exact
+        - applied_today_litres
         - gross_depth_mm
         - recommended_window
         - headline
@@ -399,6 +428,17 @@ components:
           type: number
           format: double
           minimum: 0
+        daily_target_litres:
+          type: integer
+          minimum: 0
+          description: Rounded weather- and rain-adjusted daily target before logged irrigation is deducted.
+        daily_target_litres_exact:
+          type: number
+          minimum: 0
+        applied_today_litres:
+          type: number
+          minimum: 0
+          description: Device-local same-day irrigation total supplied to the deterministic engine.
         gross_depth_mm:
           type: number
           format: double
@@ -420,7 +460,7 @@ components:
         rain_adjustment_litres:
           type: number
           minimum: 0
-          description: max(0, no-rain baseline minus recommended litres) when forecast rain was credited; zero whenever no rain qualified, including sub-threshold SKIP days. Not a general water-saved claim.
+          description: max(0, no-rain baseline minus the daily target) when forecast rain was credited; logged irrigation is never included in this value. Zero whenever no rain qualified, including sub-threshold SKIP days.
         previous_recommendation_delta_litres:
           type: number
 
@@ -512,6 +552,36 @@ components:
           type: string
           enum: [NOT_CONNECTED, STALE, UNCALIBRATED, CALIBRATED_PREVIEW]
         reason:
+          type: string
+        irrigation_response:
+          $ref: '#/components/schemas/SensorIrrigationResponse'
+
+    SensorIrrigationResponse:
+      type: object
+      required: [status, irrigation_logged_at, irrigation_litres, before_observed_at, after_observed_at, before_water_content_pct, after_water_content_pct, change_percentage_points, observation]
+      properties:
+        status:
+          type: string
+          enum: [INCREASED, NO_INCREASE, STALE]
+        irrigation_logged_at:
+          type: string
+          format: date-time
+        irrigation_litres:
+          type: number
+          minimum: 0
+        before_observed_at:
+          type: string
+          format: date-time
+        after_observed_at:
+          type: string
+          format: date-time
+        before_water_content_pct:
+          type: number
+        after_water_content_pct:
+          type: number
+        change_percentage_points:
+          type: number
+        observation:
           type: string
 
     PreviousComparison:

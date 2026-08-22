@@ -41,3 +41,5 @@ Credentials must be supplied through `KIJANISPACE_API_KEY`; no credential is emb
 - an unprefixed provider token/API key for generic Bearer and `X-API-Key` compatibility.
 
 The client has a three-second timeout. A successful response is cached in memory for 60 minutes and can be used after a live-provider failure before AXIS falls back to embedded climatology. Climatological rainfall is never credited as forecast rain.
+
+Live failures are logged by safe category (`CONFIGURATION`, `TIMEOUT`, `REQUEST`, `HTTP_STATUS`, `DECODE`, `TIMESTAMP`, or `NO_USABLE_DATA`) before cache or climatology is selected. Logs include an HTTP status when applicable but never include credentials, authorization headers, query keys, or provider response bodies.

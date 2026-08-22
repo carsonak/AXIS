@@ -1,9 +1,12 @@
 package weather
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -116,6 +119,23 @@ func TestKijaniOptionalArraysMustCoverAlignedWindow(t *testing.T) {
 	}
 }
 
+func TestKijaniNullSamplesDoNotDiscardUsableForecast(t *testing.T) {
+	raw := hourlyPayload(4, "EAT")
+	raw["forecast_data"].(map[string]any)["temperature"] = []any{20.0, nil, 24.0, 22.0}
+	raw["forecast_data"].(map[string]any)["precipitation"] = []any{0.0, 1.0, nil, 2.0}
+	raw["forecast_data"].(map[string]any)["windspeed"] = []any{nil, 2.0, 4.0, nil}
+	value, err := mapKijani(raw, time.Date(2026, 8, 21, 0, 0, 0, 0, time.FixedZone("EAT", 3*60*60)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.TMinC != 20 || value.TMaxC != 22 || value.RainNext24HMM != 2 {
+		t.Fatalf("mapped required values = %+v", value)
+	}
+	if value.WindMS == nil || *value.WindMS != 3 {
+		t.Fatalf("mapped optional wind = %+v", value.WindMS)
+	}
+}
+
 func TestKijaniTimestampFallsBackToRequestLocation(t *testing.T) {
 	raw := hourlyPayload(2, "Unsupported/Zone")
 	requestedAt := time.Date(2026, 8, 21, 0, 0, 0, 0, time.FixedZone("request-zone", 2*60*60))
@@ -169,6 +189,51 @@ func TestKijaniAuthentication(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestKijaniFailureCategories(t *testing.T) {
+	tests := []struct {
+		name       string
+		response   *http.Response
+		err        error
+		want       KijaniFailureKind
+		wantStatus int
+	}{
+		{name: "timeout", err: context.DeadlineExceeded, want: KijaniTimeout},
+		{name: "unauthorized", response: &http.Response{StatusCode: http.StatusUnauthorized, Status: "401 Unauthorized", Body: io.NopCloser(strings.NewReader("secret body")), Header: make(http.Header)}, want: KijaniHTTPStatus, wantStatus: 401},
+		{name: "decode", response: &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("{")), Header: make(http.Header)}, want: KijaniDecode},
+		{name: "no usable data", response: &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(`{"forecast_data":{"time":[],"temperature":[],"precipitation":[]}}`)), Header: make(http.Header)}, want: KijaniNoUsableData},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			provider := NewKijani("https://weather.example.test/land", "not-logged-secret")
+			provider.Client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if test.response != nil {
+					test.response.Request = r
+				}
+				return test.response, test.err
+			})}
+			_, err := provider.Daily(context.Background(), -.0917, 34.768, time.Now())
+			var failure *KijaniError
+			if !errors.As(err, &failure) || failure.Kind != test.want || failure.StatusCode != test.wantStatus {
+				t.Fatalf("error = %#v", err)
+			}
+			if strings.Contains(err.Error(), "not-logged-secret") || strings.Contains(err.Error(), "secret body") {
+				t.Fatalf("error leaked a secret: %v", err)
+			}
+		})
+	}
+}
+
+func TestKijaniTimestampFailureIsCategorized(t *testing.T) {
+	provider := NewKijani("https://weather.example.test/land", "key")
+	provider.Client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader(`{"forecast_data":{"time":["bad-time"],"temperature":[20],"precipitation":[0]}}`)), Header: make(http.Header), Request: r}, nil
+	})}
+	_, err := provider.Daily(context.Background(), -.0917, 34.768, time.Now())
+	if KijaniFailureCategory(err) != string(KijaniTimestamp) {
+		t.Fatalf("category = %s, error = %v", KijaniFailureCategory(err), err)
 	}
 }
 
@@ -263,5 +328,21 @@ func TestChainCachesLiveSuccess(t *testing.T) {
 	}
 	if second.Source != "MEMORY_CACHE" || fallback.calls != 0 {
 		t.Fatalf("cache was not used: %+v", second)
+	}
+}
+
+func TestChainLogsLiveFailureAndFallbackWithoutSecrets(t *testing.T) {
+	var output bytes.Buffer
+	live := &stubProvider{err: &KijaniError{Kind: KijaniHTTPStatus, StatusCode: 401}}
+	fallback := &stubProvider{value: domain.WeatherSnapshot{Source: "CLIMATOLOGY", TMinC: 17, TMaxC: 28}}
+	chain := Chain{Live: live, Fallback: fallback, Logger: slog.New(slog.NewJSONHandler(&output, nil))}
+	if _, err := chain.Daily(context.Background(), 0, 35, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	logText := output.String()
+	for _, wanted := range []string{`"category":"HTTP_STATUS"`, `HTTP 401`, `"source":"CLIMATOLOGY"`} {
+		if !strings.Contains(logText, wanted) {
+			t.Errorf("log missing %s: %s", wanted, logText)
+		}
 	}
 }

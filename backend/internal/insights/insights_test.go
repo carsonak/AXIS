@@ -80,6 +80,9 @@ func TestCompatibleProviderIncludesDistinctQuestionsAndGuardrails(t *testing.T) 
 				t.Errorf("system prompt missing %q: %s", guardrail, prompt.Messages[0].Content)
 			}
 		}
+		if !strings.Contains(prompt.Messages[0].Content, "same language as the farmer's latest question") {
+			t.Errorf("system prompt does not prioritize the question language: %s", prompt.Messages[0].Content)
+		}
 	}
 	if prompts[0].Messages[1].Content == prompts[1].Messages[1].Content {
 		t.Fatal("materially different questions produced identical user prompts")

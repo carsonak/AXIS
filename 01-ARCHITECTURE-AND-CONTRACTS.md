@@ -160,7 +160,7 @@ Representative response:
 
 Purpose: the single business endpoint.
 
-Input: the full current plot calculation context.
+Input: the full current plot calculation context plus the device-local sum of water already logged for that plot and Nairobi-local date. Optional before/after sensor readings remain corroborating context only.
 Output: recommendation + weather provenance + explanation steps.
 
 Representative response:
@@ -181,6 +181,9 @@ Representative response:
     "action": "REDUCED",
     "litres": 2400,
     "litres_exact": 2424.6,
+    "daily_target_litres": 2400,
+    "daily_target_litres_exact": 2424.6,
+    "applied_today_litres": 0,
     "gross_depth_mm": 2.4,
     "modeled_gross_depth_before_threshold_mm": 2.4,
     "duration_minutes": 55,
@@ -207,7 +210,9 @@ Representative response:
       {"key":"efficiency","label":"Drip efficiency","value":90,"unit":"%"},
       {"key":"area","label":"Plot area","value":1011.7,"unit":"m²"},
       {"key":"baseline","label":"Without forecast rain","value":6021.8,"unit":"L"},
-      {"key":"litres","label":"Water to apply","value":2424.6,"unit":"L"}
+      {"key":"daily_target","label":"Today's adjusted target","value":2424.6,"unit":"L"},
+      {"key":"applied_today","label":"Already irrigated today","value":0,"unit":"L"},
+      {"key":"litres","label":"Remaining amount to apply","value":2424.6,"unit":"L"}
     ]
   },
   "confidence": {
