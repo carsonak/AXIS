@@ -36,7 +36,7 @@ func main() {
 		mode = "live"
 		weatherProvider = weather.Chain{
 			Live:  weather.NewKijani(os.Getenv("KIJANISPACE_API_URL"), os.Getenv("KIJANISPACE_API_KEY")),
-			Cache: weather.NewCache(60 * time.Minute), Fallback: climate,
+			Cache: weather.NewCache(60 * time.Minute), Fallback: climate, Logger: logger,
 		}
 	}
 
@@ -55,7 +55,7 @@ func main() {
 	port := env("PORT", "8080")
 	httpServer := &http.Server{Addr: ":" + port, Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 	_, aiEnabled := insightProvider.(*insights.CompatibleProvider)
-	logger.Info("AXIS server listening", "port", port, "weather_mode", mode, "ai_enabled", aiEnabled)
+	logger.Info("AXIS server listening", "port", port, "weather_mode", mode, "kijani_configured", os.Getenv("KIJANISPACE_API_KEY") != "", "ai_enabled", aiEnabled)
 	if err := httpServer.ListenAndServe(); err != nil {
 		logger.Error("server stopped", "error", err)
 		os.Exit(1)

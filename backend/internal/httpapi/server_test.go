@@ -80,7 +80,7 @@ func TestRecommendationContract(t *testing.T) {
 		}
 	}
 	decision := value["decision"].(map[string]any)
-	for _, key := range []string{"baseline_litres_no_rain", "rain_adjustment_litres", "litres", "duration_minutes"} {
+	for _, key := range []string{"baseline_litres_no_rain", "rain_adjustment_litres", "daily_target_litres", "daily_target_litres_exact", "applied_today_litres", "litres", "duration_minutes"} {
 		if _, ok := decision[key]; !ok {
 			t.Errorf("decision missing %s", key)
 		}
@@ -159,5 +159,16 @@ func TestInsightQuestionValidationAndForwarding(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), `"field":"history"`) {
 		t.Fatalf("history limit response = %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestInsightRejectsUnknownRecommendationMetadataAsSchemaError(t *testing.T) {
+	server := testServer(t)
+	server.Insights = &recordingInsightProvider{}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/insights", bytes.NewBufferString(`{"question":"Explain this","recommendation":{"id":"local-only","savedAt":"2026-08-20T00:00:00Z"},"history":[]}`))
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "fields that are not supported") {
+		t.Fatalf("response = %d: %s", rec.Code, rec.Body.String())
 	}
 }

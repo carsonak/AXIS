@@ -60,7 +60,9 @@ func (s *Server) catalog(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) recommendation(w http.ResponseWriter, r *http.Request) {
 	var input domain.RecommendationRequest
 	if err := decodeJSON(r, &input); err != nil {
-		writeError(w, http.StatusBadRequest, "VALIDATION_FAILED", "Request body must be valid JSON.", "")
+		category, message := classifyJSONError(err)
+		s.logger().Warn("recommendation request rejected", "category", category, "error", err)
+		writeError(w, http.StatusBadRequest, "VALIDATION_FAILED", message, "")
 		return
 	}
 	now := s.now()
@@ -117,7 +119,9 @@ func (s *Server) insight(w http.ResponseWriter, r *http.Request) {
 	}
 	var input domain.InsightRequest
 	if err := decodeJSON(r, &input); err != nil {
-		writeError(w, http.StatusBadRequest, "VALIDATION_FAILED", "Request body must be valid JSON.", "")
+		category, message := classifyJSONError(err)
+		s.logger().Warn("insight request rejected", "category", category, "error", err)
+		writeError(w, http.StatusBadRequest, "VALIDATION_FAILED", message, "")
 		return
 	}
 	if strings.TrimSpace(input.Question) == "" {
@@ -151,6 +155,21 @@ func decodeJSON(r *http.Request, target any) error {
 		return errors.New("multiple JSON values")
 	}
 	return nil
+}
+
+func classifyJSONError(err error) (string, string) {
+	var syntax *json.SyntaxError
+	if errors.As(err, &syntax) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
+		return "MALFORMED_JSON", "Request body must be valid JSON."
+	}
+	if strings.Contains(err.Error(), "unknown field") {
+		return "UNKNOWN_FIELD", "Request body contains fields that are not supported by this API."
+	}
+	var typeError *json.UnmarshalTypeError
+	if errors.As(err, &typeError) {
+		return "INVALID_FIELD_TYPE", "Request body contains a field with an invalid value type."
+	}
+	return "INVALID_SCHEMA", "Request body does not match the expected API schema."
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

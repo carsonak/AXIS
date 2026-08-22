@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -20,6 +22,53 @@ import (
 
 type Provider interface {
 	Daily(ctx context.Context, lat, lon float64, date time.Time) (domain.WeatherSnapshot, error)
+}
+
+type KijaniFailureKind string
+
+const (
+	KijaniConfiguration KijaniFailureKind = "CONFIGURATION"
+	KijaniTimeout       KijaniFailureKind = "TIMEOUT"
+	KijaniRequest       KijaniFailureKind = "REQUEST"
+	KijaniHTTPStatus    KijaniFailureKind = "HTTP_STATUS"
+	KijaniDecode        KijaniFailureKind = "DECODE"
+	KijaniTimestamp     KijaniFailureKind = "TIMESTAMP"
+	KijaniNoUsableData  KijaniFailureKind = "NO_USABLE_DATA"
+)
+
+type KijaniError struct {
+	Kind       KijaniFailureKind
+	StatusCode int
+	Err        error
+}
+
+func (e *KijaniError) Error() string {
+	switch e.Kind {
+	case KijaniConfiguration:
+		return "Kijani configuration failed: KIJANISPACE_API_KEY is not configured"
+	case KijaniTimeout:
+		return "Kijani request timed out"
+	case KijaniHTTPStatus:
+		return fmt.Sprintf("Kijani request failed: HTTP %d", e.StatusCode)
+	case KijaniDecode:
+		return fmt.Sprintf("Kijani response decode failed: %v", e.Err)
+	case KijaniTimestamp:
+		return fmt.Sprintf("Kijani forecast timestamp failed: %v", e.Err)
+	case KijaniNoUsableData:
+		return fmt.Sprintf("Kijani forecast contains no usable samples for requested window: %v", e.Err)
+	default:
+		return fmt.Sprintf("Kijani request failed: %v", e.Err)
+	}
+}
+
+func (e *KijaniError) Unwrap() error { return e.Err }
+
+func KijaniFailureCategory(err error) string {
+	var failure *KijaniError
+	if errors.As(err, &failure) {
+		return string(failure.Kind)
+	}
+	return "UNKNOWN"
 }
 
 type FixtureProvider struct{}
@@ -48,7 +97,7 @@ func NewKijani(endpoint, apiKey string) *KijaniProvider {
 
 func (p *KijaniProvider) Daily(ctx context.Context, lat, lon float64, requestedAt time.Time) (domain.WeatherSnapshot, error) {
 	if p.APIKey == "" {
-		return domain.WeatherSnapshot{}, errors.New("KIJANISPACE_API_KEY is not configured")
+		return domain.WeatherSnapshot{}, &KijaniError{Kind: KijaniConfiguration}
 	}
 	u, err := url.Parse(p.Endpoint)
 	if err != nil {
@@ -75,18 +124,30 @@ func (p *KijaniProvider) Daily(ctx context.Context, lat, lon float64, requestedA
 	}
 	resp, err := p.Client.Do(req)
 	if err != nil {
-		return domain.WeatherSnapshot{}, fmt.Errorf("KijaniSpace request: %w", err)
+		var networkError net.Error
+		if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &networkError) && networkError.Timeout()) {
+			return domain.WeatherSnapshot{}, &KijaniError{Kind: KijaniTimeout, Err: err}
+		}
+		return domain.WeatherSnapshot{}, &KijaniError{Kind: KijaniRequest, Err: err}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		return domain.WeatherSnapshot{}, fmt.Errorf("KijaniSpace returned %s", resp.Status)
+		return domain.WeatherSnapshot{}, &KijaniError{Kind: KijaniHTTPStatus, StatusCode: resp.StatusCode}
 	}
 	var raw any
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&raw); err != nil {
-		return domain.WeatherSnapshot{}, fmt.Errorf("decode KijaniSpace response: %w", err)
+		return domain.WeatherSnapshot{}, &KijaniError{Kind: KijaniDecode, Err: err}
 	}
-	return mapKijani(raw, requestedAt)
+	value, err := mapKijani(raw, requestedAt)
+	if err == nil {
+		return value, nil
+	}
+	var failure *KijaniError
+	if errors.As(err, &failure) {
+		return domain.WeatherSnapshot{}, err
+	}
+	return domain.WeatherSnapshot{}, &KijaniError{Kind: KijaniNoUsableData, Err: err}
 }
 
 func mapKijani(raw any, requestedAt time.Time) (domain.WeatherSnapshot, error) {
@@ -100,26 +161,45 @@ func mapKijani(raw any, requestedAt time.Time) (domain.WeatherSnapshot, error) {
 		if err != nil {
 			return domain.WeatherSnapshot{}, err
 		}
-		tMin := minSlice(tArr[start:end])
-		tMax := maxSlice(tArr[start:end])
-		rain := math.Max(0, sumSlice(rArr[start:end]))
+		usableTemperatures := make([]float64, 0, end-start)
+		usableRain := make([]float64, 0, end-start)
+		for index := start; index < end; index++ {
+			if !finiteWeather(tArr[index]) || !finiteWeather(rArr[index]) {
+				continue
+			}
+			usableTemperatures = append(usableTemperatures, tArr[index])
+			usableRain = append(usableRain, rArr[index])
+		}
+		if len(usableTemperatures) == 0 {
+			return domain.WeatherSnapshot{}, errors.New("required temperature and precipitation arrays contain no aligned numeric samples")
+		}
+		tMin := minSlice(usableTemperatures)
+		tMax := maxSlice(usableTemperatures)
+		rain := math.Max(0, sumSlice(usableRain))
 
 		result := domain.WeatherSnapshot{Source: "KIJANISPACE", TMinC: tMin, TMaxC: tMax, RainNext24HMM: rain}
 		if pArr, ok := findNumberArray(raw, "precipitation_probability", "probability_of_precipitation", "pop", "rain_probability"); ok && len(pArr) >= end {
-			maxP := maxSlice(pArr[start:end])
-			if maxP > 1 {
-				maxP /= 100
+			probabilities := finiteWeatherSlice(pArr[start:end])
+			if len(probabilities) > 0 {
+				maxP := maxSlice(probabilities)
+				if maxP > 1 {
+					maxP /= 100
+				}
+				maxP = math.Max(0, math.Min(1, maxP))
+				result.RainProbability = &maxP
 			}
-			maxP = math.Max(0, math.Min(1, maxP))
-			result.RainProbability = &maxP
 		}
 		if wArr, ok := findNumberArray(raw, "windspeed", "wind_speed", "wind_ms"); ok && len(wArr) >= end {
-			meanW := meanSlice(wArr[start:end])
-			result.WindMS = &meanW
+			winds := finiteWeatherSlice(wArr[start:end])
+			if len(winds) > 0 {
+				meanW := meanSlice(winds)
+				result.WindMS = &meanW
+			}
 		}
 		if eArr, ok := findNumberArray(raw, "potentialevapotranspiration", "evapotranspiration", "et0_mm", "eto"); ok && len(eArr) >= end {
-			sumE := sumSlice(eArr[start:end])
-			if sumE >= 0 {
+			et0Values := finiteWeatherSlice(eArr[start:end])
+			sumE := sumSlice(et0Values)
+			if len(et0Values) > 0 && sumE >= 0 {
 				result.ET0MM = &sumE
 				result.ET0Method = "PROVIDER"
 			}
@@ -171,7 +251,7 @@ func forecastWindow(times []string, requestedAt time.Time, location *time.Locati
 	for index, value := range times {
 		parsed, err := parseKijaniTime(value, location)
 		if err != nil {
-			return 0, 0, fmt.Errorf("parse KijaniSpace forecast time %q: %w", value, err)
+			return 0, 0, &KijaniError{Kind: KijaniTimestamp, Err: fmt.Errorf("parse forecast time %q: %w", value, err)}
 		}
 		if start < 0 && !parsed.Before(requestedAt) {
 			start = index
@@ -301,6 +381,8 @@ func toFloatSlice(value any) ([]float64, bool) {
 	res := make([]float64, 0, len(items))
 	for _, item := range items {
 		switch num := item.(type) {
+		case nil:
+			res = append(res, math.NaN())
 		case float64:
 			res = append(res, num)
 		case json.Number:
@@ -320,6 +402,18 @@ func toFloatSlice(value any) ([]float64, bool) {
 		}
 	}
 	return res, true
+}
+
+func finiteWeather(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value, 0) }
+
+func finiteWeatherSlice(values []float64) []float64 {
+	result := make([]float64, 0, len(values))
+	for _, value := range values {
+		if finiteWeather(value) {
+			result = append(result, value)
+		}
+	}
+	return result
 }
 
 func minSlice(vals []float64) float64 {
@@ -520,6 +614,7 @@ type Chain struct {
 	Live     Provider
 	Cache    *Cache
 	Fallback Provider
+	Logger   *slog.Logger
 }
 
 func (p Chain) Daily(ctx context.Context, lat, lon float64, date time.Time) (domain.WeatherSnapshot, error) {
@@ -529,15 +624,24 @@ func (p Chain) Daily(ctx context.Context, lat, lon float64, date time.Time) (dom
 				p.Cache.Put(lat, lon, date, value)
 			}
 			return value, nil
+		} else if p.Logger != nil {
+			p.Logger.Warn("Kijani live weather failed", "category", KijaniFailureCategory(err), "error", err)
 		}
 	}
 	if p.Cache != nil {
 		if value, ok := p.Cache.Get(lat, lon, date); ok {
+			if p.Logger != nil {
+				p.Logger.Info("weather fallback selected", "source", "MEMORY_CACHE")
+			}
 			return value, nil
 		}
 	}
 	if p.Fallback != nil {
-		return p.Fallback.Daily(ctx, lat, lon, date)
+		value, err := p.Fallback.Daily(ctx, lat, lon, date)
+		if err == nil && p.Logger != nil {
+			p.Logger.Warn("weather fallback selected", "source", "CLIMATOLOGY")
+		}
+		return value, err
 	}
 	return domain.WeatherSnapshot{}, errors.New("all weather providers failed")
 }
