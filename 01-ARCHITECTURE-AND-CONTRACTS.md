@@ -280,6 +280,7 @@ The live endpoint serves multi-day hourly weather and agro-climatic forecasts. T
 
 - `POST /api/v1/insights` is disabled by default. When configured, the backend sends the current deterministic explanation and at most seven selected history records to an OpenAI-compatible provider. The response contains explanatory text only and cannot alter recommendation fields.
 - AI credentials remain server-side, no history is persisted by the backend, and provider failure leaves the native explanation untouched.
+- Provider timeouts, network failures, HTTP rejections, malformed responses, and empty responses have distinct safe API codes and structured log categories. Logs may include status, provider request ID, and duration, but never credentials, authorization headers, request bodies, or provider response bodies. The canonical environment-variable reference is [`.env.example`](.env.example).
 - The current soil-humidity preview accepts timestamped VWC plus optional field-capacity, wilting-point and root-zone calibration. Stale or uncalibrated inputs never affect litres, and the adjustment model remains inactive.
 - The current flow-meter path accepts manually entered cumulative start/end readings and stores their difference as measured applied litres. Automatic hardware ingestion remains a future adapter.
 

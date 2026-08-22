@@ -15,7 +15,7 @@ import (
 	"axis/backend/internal/domain"
 )
 
-const DefaultTimeout = 30 * time.Second
+const DefaultTimeout = 20 * time.Second
 
 var ErrDisabled = errors.New("AI insights are disabled")
 
