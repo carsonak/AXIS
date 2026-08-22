@@ -25,6 +25,16 @@ For each recommendation AXIS:
 
 Temperature and precipitation determine the usable required window. An optional array that cannot cover that same window is omitted rather than shifted. Payloads containing scalar daily fields continue through the scalar compatibility mapper.
 
+## Multi-day timeline forecast
+
+`POST /api/v1/weather/forecast` uses the same Kijani payload through a separate forecast-series mapper. It groups aligned samples by Africa/Nairobi calendar date, returns today plus no more than five provider-supplied future days, and does not change the rolling `Daily(...)` behavior above. Each future day is passed to the authoritative irrigation engine with its own date and zero applied farmer water. Climatology is not expanded into a forecast series.
+
+## Open-Meteo historical reanalysis
+
+`GET /api/v1/weather/history` proxies bounded requests to `https://archive-api.open-meteo.com/v1/archive` using `timezone=Africa/Nairobi` and `wind_speed_unit=ms`. Requests are limited to 14 past dates and include `temperature_2m`, `relative_humidity_2m`, `precipitation`, `rain`, `weather_code`, `et0_fao_evapotranspiration`, `vapour_pressure_deficit`, `wind_speed_10m`, `soil_temperature_0_to_7cm`, and `soil_moisture_0_to_7cm`.
+
+Open-Meteo values are labeled historical reanalysis. In particular, modeled shallow soil moisture is not represented as a field sensor observation. Successful timeline responses are cached in device-local IndexedDB; historical entries refresh after 30 days and current/forecast entries after 60 minutes.
+
 ## Timezones
 
 The verified live payload identifies `EAT`, which AXIS interprets as UTC+03:00. RFC3339 timestamps retain their explicit offsets. If a naive provider timestamp has no recognized timezone, AXIS uses the location attached to the recommendation request time. The live HTTP path supplies current Nairobi time.

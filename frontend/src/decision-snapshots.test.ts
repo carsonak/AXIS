@@ -163,5 +163,6 @@ describe('IndexedDB migration', () => {
     expect(await database.insights.count()).toBe(1)
     expect(await database.sensorReadings.count()).toBe(1)
     expect(await database.decisionSnapshots.count()).toBe(0)
+    expect(await database.timelineWeather.count()).toBe(0)
   })
 })

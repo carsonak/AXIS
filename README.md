@@ -11,6 +11,7 @@ AXIS answers a practical question for a specific plot: how many litres should be
 3. A deterministic agronomy engine derives the crop stage and calculates crop-water replacement, forecast-rain credit, irrigation efficiency, litres, and optional runtime.
 4. The complete recommendation and explanation are stored in device-local IndexedDB so they remain available offline.
 5. While the app is open and online, existing advice refreshes hourly. Farmers can also refresh it manually.
+6. The dedicated Weather Timeline combines Open-Meteo historical reanalysis, KijaniSpace forecast days, local AXIS snapshots, and farmer irrigation events without moving farmer records off-device.
 
 ## Current capabilities
 
@@ -21,6 +22,7 @@ AXIS answers a practical question for a specific plot: how many litres should be
 - Offline plots, recommendations, irrigation events, settings, sensor context, and seven-day history.
 - Same-day irrigation feedback: locally logged water is summed per plot and subtracted by the deterministic engine from the weather-adjusted daily target; offline displays are clearly based on the last saved target until reconciliation.
 - Immutable device-local decision snapshots preserve issuance-time weather, recommendation, applied-water balance, and optional soil context for each irrigation event and each finalized day.
+- A vertically scrollable agricultural weather timeline provides expandable hourly history, available multi-day forecasts, and deterministic future irrigation plans with a bounded IndexedDB cache.
 - Deterministic quick explanations remain available offline, while unmatched custom assistant questions use the optional AI provider and show explicit failures instead of fabricated fallback answers.
 - Manual irrigation records and cumulative flow-meter start/end entry.
 - Data source, confidence, last refresh, and provider-model timestamps.

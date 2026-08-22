@@ -111,3 +111,30 @@ export interface StoredInsight {
 
 
 export interface APIError { error: { code: string; message: string; field?: string } }
+
+export type TimelineDayKind = 'HISTORICAL' | 'CURRENT' | 'FORECAST'
+export type TimelineWeatherSource = 'OPEN_METEO' | 'KIJANISPACE'
+
+export interface TimelineHourlyWeather {
+  time: string
+  temperature_c?: number; relative_humidity_pct?: number; precipitation_mm?: number; rain_mm?: number
+  rain_probability?: number; weather_code?: number; et0_mm?: number; vapour_pressure_deficit_kpa?: number
+  wind_ms?: number; soil_temperature_c?: number; modeled_soil_moisture_m3_m3?: number
+}
+
+export interface TimelineDailySummary {
+  t_min_c?: number; t_max_c?: number; rain_mm?: number; rain_probability?: number; et0_mm?: number
+  mean_relative_humidity_pct?: number; mean_wind_ms?: number; mean_soil_temperature_c?: number
+  mean_modeled_soil_moisture_m3_m3?: number
+}
+
+export interface TimelineWeatherDay {
+  date: string; kind: TimelineDayKind; source: TimelineWeatherSource; provider_model_run_at?: string
+  summary: TimelineDailySummary; hourly: TimelineHourlyWeather[]; recommendation?: Recommendation; planning_unavailable?: string
+}
+
+export interface WeatherTimelineResponse { timezone: 'Africa/Nairobi'; days: TimelineWeatherDay[] }
+
+export interface TimelineWeatherRecord extends TimelineWeatherDay {
+  id: string; plotId: string; lat: number; lon: number; fetchedAt: string; expiresAt: string
+}

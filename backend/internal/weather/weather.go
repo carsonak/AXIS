@@ -96,12 +96,28 @@ func NewKijani(endpoint, apiKey string) *KijaniProvider {
 }
 
 func (p *KijaniProvider) Daily(ctx context.Context, lat, lon float64, requestedAt time.Time) (domain.WeatherSnapshot, error) {
+	raw, err := p.fetchRaw(ctx, lat, lon)
+	if err != nil {
+		return domain.WeatherSnapshot{}, err
+	}
+	value, err := mapKijani(raw, requestedAt)
+	if err == nil {
+		return value, nil
+	}
+	var failure *KijaniError
+	if errors.As(err, &failure) {
+		return domain.WeatherSnapshot{}, err
+	}
+	return domain.WeatherSnapshot{}, &KijaniError{Kind: KijaniNoUsableData, Err: err}
+}
+
+func (p *KijaniProvider) fetchRaw(ctx context.Context, lat, lon float64) (any, error) {
 	if p.APIKey == "" {
-		return domain.WeatherSnapshot{}, &KijaniError{Kind: KijaniConfiguration}
+		return nil, &KijaniError{Kind: KijaniConfiguration}
 	}
 	u, err := url.Parse(p.Endpoint)
 	if err != nil {
-		return domain.WeatherSnapshot{}, err
+		return nil, err
 	}
 	q := u.Query()
 	q.Set("lat", strconv.FormatFloat(lat, 'f', 6, 64))
@@ -109,7 +125,7 @@ func (p *KijaniProvider) Daily(ctx context.Context, lat, lon float64, requestedA
 	u.RawQuery = q.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		return domain.WeatherSnapshot{}, err
+		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
 	if strings.HasPrefix(p.APIKey, "Basic ") {
@@ -126,28 +142,20 @@ func (p *KijaniProvider) Daily(ctx context.Context, lat, lon float64, requestedA
 	if err != nil {
 		var networkError net.Error
 		if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &networkError) && networkError.Timeout()) {
-			return domain.WeatherSnapshot{}, &KijaniError{Kind: KijaniTimeout, Err: err}
+			return nil, &KijaniError{Kind: KijaniTimeout, Err: err}
 		}
-		return domain.WeatherSnapshot{}, &KijaniError{Kind: KijaniRequest, Err: err}
+		return nil, &KijaniError{Kind: KijaniRequest, Err: err}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
-		return domain.WeatherSnapshot{}, &KijaniError{Kind: KijaniHTTPStatus, StatusCode: resp.StatusCode}
+		return nil, &KijaniError{Kind: KijaniHTTPStatus, StatusCode: resp.StatusCode}
 	}
 	var raw any
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&raw); err != nil {
-		return domain.WeatherSnapshot{}, &KijaniError{Kind: KijaniDecode, Err: err}
+		return nil, &KijaniError{Kind: KijaniDecode, Err: err}
 	}
-	value, err := mapKijani(raw, requestedAt)
-	if err == nil {
-		return value, nil
-	}
-	var failure *KijaniError
-	if errors.As(err, &failure) {
-		return domain.WeatherSnapshot{}, err
-	}
-	return domain.WeatherSnapshot{}, &KijaniError{Kind: KijaniNoUsableData, Err: err}
+	return raw, nil
 }
 
 func mapKijani(raw any, requestedAt time.Time) (domain.WeatherSnapshot, error) {

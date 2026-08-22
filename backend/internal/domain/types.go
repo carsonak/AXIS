@@ -138,6 +138,53 @@ type WeatherSnapshot struct {
 	ET0Method          string   `json:"et0_method,omitempty"`
 }
 
+type TimelineHourlyWeather struct {
+	Time                    string   `json:"time"`
+	TemperatureC            *float64 `json:"temperature_c,omitempty"`
+	RelativeHumidityPC      *float64 `json:"relative_humidity_pct,omitempty"`
+	PrecipitationMM         *float64 `json:"precipitation_mm,omitempty"`
+	RainMM                  *float64 `json:"rain_mm,omitempty"`
+	RainProbability         *float64 `json:"rain_probability,omitempty"`
+	WeatherCode             *int     `json:"weather_code,omitempty"`
+	ET0MM                   *float64 `json:"et0_mm,omitempty"`
+	VapourPressureDeficit   *float64 `json:"vapour_pressure_deficit_kpa,omitempty"`
+	WindMS                  *float64 `json:"wind_ms,omitempty"`
+	SoilTemperatureC        *float64 `json:"soil_temperature_c,omitempty"`
+	ModeledSoilMoistureM3M3 *float64 `json:"modeled_soil_moisture_m3_m3,omitempty"`
+}
+
+type TimelineDailySummary struct {
+	TMinC                   *float64 `json:"t_min_c,omitempty"`
+	TMaxC                   *float64 `json:"t_max_c,omitempty"`
+	RainMM                  *float64 `json:"rain_mm,omitempty"`
+	RainProbability         *float64 `json:"rain_probability,omitempty"`
+	ET0MM                   *float64 `json:"et0_mm,omitempty"`
+	MeanRelativeHumidityPC  *float64 `json:"mean_relative_humidity_pct,omitempty"`
+	MeanWindMS              *float64 `json:"mean_wind_ms,omitempty"`
+	MeanSoilTemperatureC    *float64 `json:"mean_soil_temperature_c,omitempty"`
+	MeanModeledSoilMoisture *float64 `json:"mean_modeled_soil_moisture_m3_m3,omitempty"`
+}
+
+type TimelineWeatherDay struct {
+	Date                string                    `json:"date"`
+	Kind                string                    `json:"kind"`
+	Source              string                    `json:"source"`
+	ProviderModelRunAt  *string                   `json:"provider_model_run_at,omitempty"`
+	Summary             TimelineDailySummary      `json:"summary"`
+	Hourly              []TimelineHourlyWeather   `json:"hourly"`
+	Recommendation      *IrrigationRecommendation `json:"recommendation,omitempty"`
+	PlanningUnavailable string                    `json:"planning_unavailable,omitempty"`
+}
+
+type WeatherTimelineResponse struct {
+	Timezone string               `json:"timezone"`
+	Days     []TimelineWeatherDay `json:"days"`
+}
+
+type ForecastTimelineRequest struct {
+	Plot PlotCalculationInput `json:"plot"`
+}
+
 type CropStageState struct {
 	ID          string `json:"id"`
 	DisplayName string `json:"display_name"`

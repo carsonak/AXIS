@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { CatalogResponse, DecisionSnapshot, IrrigationEvent, IrrigationSensorContext, Plot, Recommendation, Settings, SoilMoistureReading, StoredInsight, StoredRecommendation } from './types'
+import type { CatalogResponse, DecisionSnapshot, IrrigationEvent, IrrigationSensorContext, Plot, Recommendation, Settings, SoilMoistureReading, StoredInsight, StoredRecommendation, TimelineWeatherRecord } from './types'
 
 interface CatalogRecord { id: 'catalog'; value: CatalogResponse; savedAt: string }
 
@@ -12,6 +12,7 @@ export class AxisDatabase extends Dexie {
   insights!: EntityTable<StoredInsight, 'id'>
   sensorReadings!: EntityTable<SoilMoistureReading, 'id'>
   decisionSnapshots!: EntityTable<DecisionSnapshot, 'id'>
+  timelineWeather!: EntityTable<TimelineWeatherRecord, 'id'>
 
   constructor(name = 'axis') {
     super(name)
@@ -34,6 +35,13 @@ export class AxisDatabase extends Dexie {
       sensorReadings: 'id, plotId, observedAt',
       decisionSnapshots: 'id, plotId, localDate, capturedAt, trigger, irrigationEventId, [plotId+localDate], [plotId+localDate+capturedAt], [plotId+localDate+trigger]'
     })
+    this.version(3).stores({
+      plots: 'id, updatedAt, cropId', recommendations: 'id, plot_id, date, savedAt, [plot_id+date]',
+      irrigationEvents: 'id, plotId, date, createdAt, [plotId+date]', catalog: 'id, savedAt', settings: 'id',
+      insights: 'id, plotId, date, generatedAt', sensorReadings: 'id, plotId, observedAt',
+      decisionSnapshots: 'id, plotId, localDate, capturedAt, trigger, irrigationEventId, [plotId+localDate], [plotId+localDate+capturedAt], [plotId+localDate+trigger]',
+      timelineWeather: 'id, plotId, date, kind, source, fetchedAt, [plotId+date]'
+    })
   }
 }
 
@@ -51,13 +59,14 @@ export function createRepositories(database: AxisDatabase) {
   async getPlot(id: string) { return database.plots.get(id) },
   async savePlot(value: Plot) { await database.plots.put(value) },
   async removePlot(id: string) {
-    await database.transaction('rw', [database.plots, database.recommendations, database.irrigationEvents, database.insights, database.sensorReadings, database.decisionSnapshots], async () => {
+    await database.transaction('rw', [database.plots, database.recommendations, database.irrigationEvents, database.insights, database.sensorReadings, database.decisionSnapshots, database.timelineWeather], async () => {
       await database.plots.delete(id)
       await database.recommendations.where('plot_id').equals(id).delete()
       await database.irrigationEvents.where('plotId').equals(id).delete()
       await database.insights.where('plotId').equals(id).delete()
       await database.sensorReadings.where('plotId').equals(id).delete()
       await database.decisionSnapshots.where('plotId').equals(id).delete()
+      await database.timelineWeather.where('plotId').equals(id).delete()
     })
   },
   async saveRecommendation(value: Recommendation) {
@@ -138,6 +147,16 @@ export function createRepositories(database: AxisDatabase) {
     const value = await database.decisionSnapshots.where('[plotId+localDate]').equals([plotId, date])
       .filter(snapshot => snapshot.trigger === 'END_OF_DAY' || snapshot.trigger === 'END_OF_DAY_CATCHUP').first()
     return Boolean(value)
+  },
+  async saveTimelineWeather(values: TimelineWeatherRecord[]) { await database.timelineWeather.bulkPut(values.map(value => structuredClone(value))) },
+  async timelineWeatherForPlot(plotId: string, lat: number, lon: number) {
+    const values = await database.timelineWeather.where('plotId').equals(plotId).toArray()
+    return values.filter(value => value.lat === lat && value.lon === lon).sort((a, b) => a.date.localeCompare(b.date))
+  },
+  async pruneTimelineWeather(plotId: string, historicalBefore: string, forecastBefore: string) {
+    const values = await database.timelineWeather.where('plotId').equals(plotId).toArray()
+    const expired = values.filter(value => value.kind === 'HISTORICAL' ? value.date < historicalBefore : value.date < forecastBefore)
+    await database.timelineWeather.bulkDelete(expired.map(value => value.id))
   }
 }
 }

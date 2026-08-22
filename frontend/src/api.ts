@@ -1,4 +1,4 @@
-import type { APIError, CatalogResponse, IrrigationSensorContext, Plot, Recommendation, SoilMoistureReading } from './types'
+import type { APIError, CatalogResponse, IrrigationSensorContext, Plot, Recommendation, SoilMoistureReading, WeatherTimelineResponse } from './types'
 
 export interface HealthResponse {
   status: string; version: string; engine_version: string; weather_mode: 'live' | 'fixture'; ai_insights_enabled: boolean
@@ -15,16 +15,19 @@ function apiSoil(reading?: SoilMoistureReading) {
   } : undefined
 }
 
+function apiPlot(plot: Plot) {
+  return {
+    id: plot.id, name: plot.name, lat: plot.lat, lon: plot.lon, area_m2: plot.areaM2,
+    crop_id: plot.cropId, planting_date: plot.plantingDate, planting_date_estimated: plot.plantingDateEstimated,
+    irrigation_method_id: plot.irrigationMethodId, flow_rate_lpm: plot.flowRateLpm
+  }
+}
+
 export async function createRecommendation(plot: Plot, date: string, previous?: Recommendation, soil?: SoilMoistureReading, appliedTodayLitres = 0, context?: IrrigationSensorContext): Promise<Recommendation> {
   return request('/api/v1/recommendations', {
     method: 'POST',
     body: JSON.stringify({
-      plot: {
-        id: plot.id, name: plot.name, lat: plot.lat, lon: plot.lon, area_m2: plot.areaM2,
-        crop_id: plot.cropId, planting_date: plot.plantingDate, planting_date_estimated: plot.plantingDateEstimated,
-        irrigation_method_id: plot.irrigationMethodId, flow_rate_lpm: plot.flowRateLpm,
-        soil_moisture: apiSoil(soil)
-      },
+      plot: { ...apiPlot(plot), soil_moisture: apiSoil(soil) },
       date,
       applied_today_litres: appliedTodayLitres,
       irrigation_context: context ? {
@@ -38,6 +41,15 @@ export async function createRecommendation(plot: Plot, date: string, previous?: 
       } : undefined
     })
   })
+}
+
+export async function getHistoricalWeather(lat: number, lon: number, startDate: string, endDate: string): Promise<WeatherTimelineResponse> {
+  const query = new URLSearchParams({ latitude: String(lat), longitude: String(lon), start_date: startDate, end_date: endDate })
+  return request(`/api/v1/weather/history?${query}`)
+}
+
+export async function getForecastTimeline(plot: Plot): Promise<WeatherTimelineResponse> {
+  return request('/api/v1/weather/forecast', { method: 'POST', body: JSON.stringify({ plot: apiPlot(plot) }) })
 }
 
 export interface InsightHistoryItem { date: string; recommended_litres: number; applied_litres?: number; rain_adjustment_litres?: number }

@@ -11,6 +11,7 @@ Legend: ✅ verified; 🟡 implemented but manually unverified; ↪ changed from
 - 🟡 The IndexedDB-first PWA, hourly foreground refresh, reconnect/resume refresh, manual refresh, history, plots, settings, and irrigation logging are implemented but still need browser and physical-device acceptance.
 - ⛔ AI remains disabled by default; soil-humidity adjustment and automatic sensor/flow-meter ingestion remain gated.
 - ✅ The isolated `axis-irrigation-dev` Fly deployment, HTTPS health endpoint, live Kijani request, deterministic irrigation-feedback request, and safe JSON rejection wording have recorded verification.
+- ✅ The agricultural weather timeline, Open-Meteo history, Kijani multi-day forecast, deterministic future planning, local container path, and isolated Fly/browser smoke flow have recorded verification.
 - ⬜ Browser acceptance, two offline force-close/reopen cycles, second-device testing, rehearsal, recording, and submission are not verified in this repository.
 
 ## Fly weather finding — 2026-08-22
@@ -26,6 +27,14 @@ The deployed irrigation-feedback smoke test returned a positive daily target, su
 ## Fly AI timeout finding — 2026-08-22
 
 The configurable AI timeout and structured provider-failure classification were deployed to `axis-irrigation-dev`. With the then-default 30-second timeout, a stateless English insight request succeeded with HTTP 200 in 8.09 seconds. The dev-only `AXIS_AI_TIMEOUT` setting was then changed to `20s`; the same request returned a safe timeout response after 20.27 seconds. The corresponding application log classified it as `TIMEOUT` with `duration_ms: 20000`, while startup reported an AI timeout of 20 seconds and a server write timeout of 25 seconds. After the final build was deployed, another request at the 20-second setting succeeded with HTTP 200 in 11.89 seconds. The code default was subsequently changed to 20 seconds. This confirms the earlier 20-second result was the AI client deadline rather than the server write deadline, and shows substantial provider latency variance between consecutive requests.
+
+## Weather timeline verification — 2026-08-22
+
+`mise run check` passed Go tests/vet, 31 frontend tests, lint, typecheck, frontend production/PWA build, and backend build. The repository `Containerfile` built as image `axis-weather-timeline:local`; its fixture-mode health, three-day historical response, six-day current/forecast response, zero future applied-water value, deterministic future recommendations, and `/app/weather` SPA fallback passed localhost smoke tests. The existing locked dependencies reported one pre-existing critical npm audit finding; no dependency or lockfile changes were made for this feature.
+
+Fly release v9 (`deployment-01M0KWS42FXFEETRNG1VZ67VSV`) was deployed only to `axis-irrigation-dev`; v7 was recorded before the timeline deployments as the original rollback point. The Johannesburg machine started with its health check passing. HTTPS health reported live weather mode and AI enabled. A Kisumu historical request returned 17–21 August as five `OPEN_METEO` days, each with 24 Nairobi-local hourly rows, ET₀, and modeled shallow soil context. The live Kijani endpoint returned 22–27 August as one current plus five forecast days. Every future recommendation used `applied_today_litres: 0`, the configured `EARLY_MORNING` window, and provider-supplied dates; no climatology days were manufactured.
+
+A transient Playwright/Chromium run outside the repository exercised the deployed app at a 390×844 viewport: created a Kisumu tomato plot, generated today's advice, opened `/app/weather`, found 11 initial date cards, expanded hourly history, loaded one older 10-day block to 21 unique cards, and rendered five future plans. With browser network access then disabled, the offline banner and cached Open-Meteo/Kijani cards remained visible. No console or page errors were recorded. This verifies the active-page offline transition, not a physical-device force-close/reopen cycle.
 
 ## Temporary ownership
 
