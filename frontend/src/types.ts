@@ -56,6 +56,35 @@ export interface Recommendation {
 
 export interface StoredRecommendation extends Recommendation { id: string; savedAt: string }
 
+export type DecisionSnapshotTrigger = 'IRRIGATION_EVENT' | 'END_OF_DAY' | 'END_OF_DAY_CATCHUP'
+
+export interface DecisionSnapshot {
+  id: string
+  plotId: string
+  localDate: string
+  capturedAt: string
+  trigger: DecisionSnapshotTrigger
+  irrigationEventId?: string
+  recommendation: Omit<Recommendation, 'weather'>
+  weather: WeatherSummary
+  waterBalance: {
+    dailyTargetLitres: number
+    appliedBeforeEventLitres: number
+    eventAppliedLitres?: number
+    cumulativeAppliedLitres: number
+    remainingLitres: number
+    action: Recommendation['decision']['action']
+    durationMinutes?: number
+  }
+  latestSoilMoisture?: SoilMoistureReading
+  sourceMetadata: {
+    recommendationGeneratedAt: string
+    recommendationSavedAt: string
+    weatherProviderObservedAt?: string
+    weatherSource: WeatherSource
+  }
+}
+
 export interface IrrigationEvent {
   id: string; plotId: string; date: string; litres: number; recommendedLitres?: number
   source: 'FOLLOWED_RECOMMENDATION' | 'MANUAL' | 'FLOW_METER'

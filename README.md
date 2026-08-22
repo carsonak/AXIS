@@ -20,6 +20,7 @@ AXIS answers a practical question for a specific plot: how many litres should be
 - KijaniSpace `/v1/agro_climate/land` integration, three-second timeout, memory cache, climatology fallback, and deterministic fixture mode.
 - Offline plots, recommendations, irrigation events, settings, sensor context, and seven-day history.
 - Same-day irrigation feedback: locally logged water is summed per plot and subtracted by the deterministic engine from the weather-adjusted daily target; offline displays are clearly based on the last saved target until reconciliation.
+- Immutable device-local decision snapshots preserve issuance-time weather, recommendation, applied-water balance, and optional soil context for each irrigation event and each finalized day.
 - Deterministic quick explanations remain available offline, while unmatched custom assistant questions use the optional AI provider and show explicit failures instead of fabricated fallback answers.
 - Manual irrigation records and cumulative flow-meter start/end entry.
 - Data source, confidence, last refresh, and provider-model timestamps.
