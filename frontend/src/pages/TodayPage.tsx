@@ -13,7 +13,7 @@ import { cropAgeDays, deriveStage, formatLitres, formatWindow, freshness, friend
 export default function TodayPage() {
   const { selectedPlot, plots, catalog, online, health, settings } = useAxis()
   const selectedPlotID = selectedPlot?.id
-  const { recommendation, localReady, refreshing, error: refreshError, now, refresh } = useRecommendationRefresh()
+  const { recommendation, localReady, refreshing, error: refreshError, now, feedbackPending, refresh } = useRecommendationRefresh()
   const navigate = useNavigate()
   const [latestEvent, setLatestEvent] = useState<IrrigationEvent>()
   const [weeklyWaterLitres, setWeeklyWaterLitres] = useState(0)
@@ -72,8 +72,8 @@ export default function TodayPage() {
     try {
       const [recs, events] = await Promise.all([repos.recommendationsForPlot(activePlot.id, dateSevenDaysAgo()), repos.eventsForPlot(activePlot.id, dateSevenDaysAgo())])
       const history: InsightHistoryItem[] = recs.slice(0, 7).map(rec => ({
-        date: rec.date, recommended_litres: rec.decision.litres_exact,
-        applied_litres: events.find(event => event.date === rec.date)?.litres,
+        date: rec.date, recommended_litres: rec.decision.daily_target_litres_exact ?? rec.decision.litres_exact,
+        applied_litres: events.filter(event => event.date === rec.date).reduce((sum, event) => sum + event.litres, 0) || undefined,
         rain_adjustment_litres: rec.decision.rain_adjustment_litres
       }))
       const question = settings.language === 'sw'
@@ -127,6 +127,7 @@ export default function TodayPage() {
       </div>
 
       {!online && <Alert tone="warn" title="You’re offline">Saved advice and irrigation logging still work. Reconnect for new weather.</Alert>}
+      {feedbackPending && recommendation && <Alert tone="warn" title="Based on the last available recommendation">Logged water has been subtracted from the saved daily target. Reconnect to refresh weather and reconcile the authoritative recommendation.</Alert>}
       {refreshError && <Alert tone="warn" title="Couldn’t refresh">{refreshError}</Alert>}
       {pageError && <Alert tone="warn" title="Couldn’t generate insight">{pageError}</Alert>}
 
@@ -327,7 +328,7 @@ export default function TodayPage() {
 
       {(refreshing || insightLoading) && <Spinner label={refreshing ? 'Refreshing weather and advice…' : 'Generating insight…'} />}
       {showWhy && recommendation && <ExplanationModal recommendation={recommendation} onClose={() => setShowWhy(false)} />}
-      {showLog && recommendation && <IrrigationModal recommendation={recommendation} plotId={activePlot.id} onClose={() => setShowLog(false)} onSaved={event => { setLatestEvent(event); setWeeklyWaterLitres(value => value + event.litres); setShowLog(false) }} />}
+      {showLog && recommendation && <IrrigationModal recommendation={recommendation} plotId={activePlot.id} onClose={() => setShowLog(false)} onSaved={async event => { setLatestEvent(event); setWeeklyWaterLitres(value => value + event.litres); setShowLog(false); await refresh() }} />}
     </Page>
   )
 }
@@ -384,7 +385,7 @@ function ExplanationModal({ recommendation, onClose }: { recommendation: StoredR
 
 
 
-function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recommendation: StoredRecommendation; plotId: string; onClose(): void; onSaved(event: IrrigationEvent): void }) {
+function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recommendation: StoredRecommendation; plotId: string; onClose(): void; onSaved(event: IrrigationEvent): void | Promise<void> }) {
   const [source, setSource] = useState<IrrigationEvent['source']>('FOLLOWED_RECOMMENDATION')
   const [litres, setLitres] = useState(String(recommendation.decision.litres))
   const [meterId, setMeterId] = useState('')
@@ -416,7 +417,7 @@ function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recomme
         meterEndLitres: source === 'FLOW_METER' ? Number(meterEnd) : undefined
       }
       await repos.saveEvent(event)
-      onSaved(event)
+      await onSaved(event)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save irrigation record.')
     }

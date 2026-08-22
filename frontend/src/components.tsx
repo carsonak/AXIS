@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useEffect, useRef, useState, type ReactNode, type FormEvent } from 'react'
 import { createInsight, type InsightHistoryItem } from './api'
+import { assistantText, deterministicAnswer, matchAssistantIntent, type AssistantIntent, type AssistantLanguage } from './assistant'
 import { repos } from './db'
 import type { Plot, Recommendation } from './types'
 import { dateDaysAgo } from './utils'
@@ -322,24 +323,17 @@ function chatTime() {
   return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-function initialChatMessages(plot?: Plot, language: 'en' | 'sw' = 'en'): ChatMessage[] {
-  const text = language === 'sw'
-    ? plot
-      ? `Unauliza kuhusu ${plot.name}. Nitatumia tu pendekezo lililohifadhiwa la shamba hili.`
-      : 'Chagua shamba ili AXIS iweze kueleza pendekezo lake lililohifadhiwa.'
-    : plot
-      ? `You are asking about ${plot.name}. I will use only this plot's saved AXIS recommendation.`
-      : 'Select a plot so AXIS can explain its saved recommendation.'
-  return [{ id: crypto.randomUUID(), sender: 'assistant', text, time: chatTime() }]
+function initialChatMessages(plot?: Plot, language: AssistantLanguage = 'en'): ChatMessage[] {
+  return [{ id: crypto.randomUUID(), sender: 'assistant', text: assistantText[language].greeting(plot), time: chatTime() }]
 }
 
 /** Generate an explanation from fields already present in a saved deterministic recommendation. */
 function generateGroundedFallback(
-  query: string,
+  intent: AssistantIntent,
   rec: Recommendation | undefined,
   plot: Plot | undefined,
   recommendationReady: boolean,
-  language: 'en' | 'sw'
+  language: AssistantLanguage
 ): string {
   if (!plot) {
     return language === 'sw'
@@ -356,37 +350,7 @@ function generateGroundedFallback(
       ? `${plot.name} haina pendekezo lililohifadhiwa. Unganisha intaneti na utengeneze pendekezo kwanza ili maelezo ya ndani yapatikane.`
       : `${plot.name} has no saved recommendation. Connect and generate one first so local explanations are available.`
   }
-
-  const q = query.toLowerCase()
-  const litres = rec.decision.litres
-  const minutes = rec.decision.duration_minutes
-  const rainAvoided = rec.decision.rain_adjustment_litres
-  const stage = rec.crop_stage.display_name
-  const age = rec.crop_stage.crop_age_days
-  const rainForecast = rec.weather.rain_next_24h_mm
-  const summary = rec.explanation.summary
-
-  if (q.includes('rain') || q.includes('mvua')) {
-    return language === 'sw'
-      ? `Utabiri uliohifadhiwa ni mm ${rainForecast} za mvua. Pendekezo la AXIS linaonyesha Lita ${rainAvoided.toLocaleString()} za maji zilizoepukwa kwa sababu mvua ilizingatiwa, na hatua yake halali ni ${rec.decision.action}.`
-      : `The saved forecast is ${rainForecast} mm of rain. The AXIS recommendation records ${rainAvoided.toLocaleString()} litres as water avoided because rain was considered, and its authoritative action is ${rec.decision.action}.`
-  }
-
-  if (q.includes('change') || q.includes('volume') || q.includes('badiliko') || q.includes('kiwango') || q.includes('why') || q.includes('kwa nini')) {
-    return language === 'sw'
-      ? `Pendekezo halali la leo ni Lita ${litres.toLocaleString()}${minutes !== undefined ? ` kwa dakika ${minutes}` : ''} katika hatua ya ${stage}. ${summary}`
-      : `Today's authoritative recommendation is ${litres.toLocaleString()} litres${minutes !== undefined ? ` for ${minutes} minutes` : ''} in the ${stage} stage. ${summary}`
-  }
-
-  if (q.includes('stage') || q.includes('crop') || q.includes('hatua') || q.includes('mmea')) {
-    return language === 'sw'
-      ? `Zao liko katika hatua ya ${stage}, siku ya ${age}. ${summary}`
-      : `The crop is in the ${stage} stage, at crop age day ${age}. ${summary}`
-  }
-
-  return language === 'sw'
-    ? `${summary} Kiasi halali kilichohifadhiwa leo ni Lita ${litres.toLocaleString()} na hatua ni ${rec.decision.action}.`
-    : `${summary} The saved authoritative application is ${litres.toLocaleString()} litres and the action is ${rec.decision.action}.`
+  return deterministicAnswer(intent, rec, language)
 }
 
 export function AIChatAssistant({
@@ -408,7 +372,9 @@ export function AIChatAssistant({
   const [messages, setMessages] = useState<ChatMessage[]>(() => initialChatMessages(selectedPlot))
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [language, setLanguage] = useState<'en' | 'sw'>('en')
+  const [language, setLanguage] = useState<AssistantLanguage>('en')
+  const [quickOpen, setQuickOpen] = useState(true)
+  const [failedQuery, setFailedQuery] = useState<string>()
   const contextGenerationRef = useRef(0)
   const previousPlotIDRef = useRef(selectedPlot?.id)
   const selectedPlotIDRef = useRef(selectedPlot?.id)
@@ -430,6 +396,8 @@ export function AIChatAssistant({
     setMessages(initialChatMessages(plot, languageRef.current))
     setInput('')
     setLoading(false)
+    setFailedQuery(undefined)
+    setQuickOpen(true)
     if (!plot) return () => { cancelled = true }
 
     void Promise.all([
@@ -439,8 +407,8 @@ export function AIChatAssistant({
       if (cancelled || contextGenerationRef.current !== generation || selectedPlotIDRef.current !== plot.id) return
       setHistoryItems(recommendations.slice(0, 7).map(rec => ({
         date: rec.date,
-        recommended_litres: rec.decision.litres_exact,
-        applied_litres: events.find(event => event.date === rec.date)?.litres,
+        recommended_litres: rec.decision.daily_target_litres_exact ?? rec.decision.litres_exact,
+        applied_litres: events.filter(event => event.date === rec.date).reduce((sum, event) => sum + event.litres, 0) || undefined,
         rain_adjustment_litres: rec.decision.rain_adjustment_litres
       })))
       setHistoryPlotID(plot.id)
@@ -452,13 +420,23 @@ export function AIChatAssistant({
     return () => { cancelled = true }
   }, [selectedPlot])
 
-  const suggestions = language === 'sw'
-    ? ['Kwa nini kiasi cha maji kilibadilika leo?', 'Utabiri wa mvua uliathirije shamba?', 'Eleza mahitaji ya hatua ya ukuaji']
-    : ['Why did my water volume change today?', 'How did rain forecast affect my plot?', 'Explain crop growth stage water needs']
+  const t = assistantText[language]
+  const suggestions: Array<{ intent: AssistantIntent; label: string }> = [
+    { intent: 'volume', label: t.questions.volume },
+    { intent: 'rain', label: t.questions.rain },
+    { intent: 'stage', label: t.questions.stage }
+  ]
+  if (recommendation?.sensor_context?.irrigation_response?.status === 'NO_INCREASE') {
+    suggestions.push({ intent: 'sensor', label: t.questions.sensor })
+  }
+  const customEnabled = online && aiEnabled === true && recommendation?.plot_id === selectedPlot?.id
 
-  async function handleSend(textToSend?: string) {
+  async function handleSend(textToSend?: string, knownIntent?: AssistantIntent) {
     const query = (textToSend || input).trim()
     if (!query || loading) return
+
+    const intent = knownIntent ?? matchAssistantIntent(query)
+    if (!intent && !customEnabled) return
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -469,6 +447,14 @@ export function AIChatAssistant({
 
     setMessages(prev => [...prev, userMsg])
     if (!textToSend) setInput('')
+    setFailedQuery(undefined)
+    if (intent) {
+      const fallbackText = generateGroundedFallback(intent, recommendation, selectedPlot, recommendationReady, language)
+      setMessages(prev => [...prev, { id: crypto.randomUUID(), sender: 'assistant', text: fallbackText, time: chatTime(), label: t.localLabel }])
+      setQuickOpen(false)
+      return
+    }
+
     setLoading(true)
     const generation = contextGenerationRef.current
     const plotID = selectedPlot?.id
@@ -478,38 +464,23 @@ export function AIChatAssistant({
     const stillCurrent = () => contextGenerationRef.current === generation && selectedPlotIDRef.current === plotID
 
     try {
-      if (online && aiEnabled === true && currentRecommendation) {
-        try {
-          const response = await createInsight(query, currentRecommendation, currentHistory, language)
-          if (!stillCurrent()) return
-          setMessages(prev => [
-            ...prev,
-            {
-              id: crypto.randomUUID(),
-              sender: 'assistant',
-              text: `${response.summary} ${response.observations.length > 0 ? ' • ' + response.observations.join(' ') : ''}`,
-              time: chatTime(),
-              label: 'AI-generated explanation'
-            }
-          ])
-          return
-        } catch {
-          // The deterministic local path remains available when the optional provider fails.
-        }
-      }
-
+      const response = await createInsight(query, currentRecommendation!, currentHistory, language)
       if (!stillCurrent()) return
-      const fallbackText = generateGroundedFallback(query, currentRecommendation, selectedPlot, recommendationReady, language)
       setMessages(prev => [
         ...prev,
         {
           id: crypto.randomUUID(),
           sender: 'assistant',
-          text: fallbackText,
+          text: `${response.summary}${response.observations.length > 0 ? ' • ' + response.observations.join(' ') : ''}`,
           time: chatTime(),
-          label: online ? 'Grounded local explanation' : 'Grounded offline explanation'
+          label: t.aiLabel
         }
       ])
+    } catch (error) {
+      if (!stillCurrent()) return
+      if (import.meta.env.DEV) console.error('AXIS AI request failed', error)
+      setFailedQuery(query)
+      setMessages(prev => [...prev, { id: crypto.randomUUID(), sender: 'assistant', text: t.error, time: chatTime() }])
     } finally {
       if (stillCurrent()) setLoading(false)
     }
@@ -528,10 +499,10 @@ export function AIChatAssistant({
           type="button"
           className="ai-chat-fab"
           onClick={() => setIsOpen(true)}
-          aria-label="Ask AXIS AI Assistant"
+          aria-label={t.fabAria}
         >
           <span className="fab-icon">🤖</span>
-          <span className="fab-label">Ask AXIS AI</span>
+          <span className="fab-label">{t.fabLabel}</span>
           <span className={`fab-status-dot ${online ? 'online' : 'offline'}`} />
         </button>
       </div>
@@ -546,8 +517,8 @@ export function AIChatAssistant({
           <div className="ai-chat-title-group">
             <div className="ai-icon-badge">🤖</div>
             <div>
-              <h3>AXIS AI Assistant</h3>
-              <p className="ai-subtitle">Grounded agronomic Q&A</p>
+              <h3>{t.title}</h3>
+              <p className="ai-subtitle">{t.subtitle}</p>
             </div>
           </div>
           <div className="ai-header-actions">
@@ -571,7 +542,7 @@ export function AIChatAssistant({
               type="button"
               className="ai-close-btn"
               onClick={() => setIsOpen(false)}
-              aria-label="Close Assistant"
+              aria-label={t.close}
             >
               ×
             </button>
@@ -580,9 +551,7 @@ export function AIChatAssistant({
 
         {(!online || aiEnabled !== true) && (
           <div className="offline-ai-banner">
-            <span>{!online
-              ? 'Saved local explanations are available offline. Live AI requires connectivity.'
-              : 'Live AI is unavailable. Grounded local explanations remain available.'}</span>
+            <span>{!online ? t.offline : t.unavailable}</span>
           </div>
         )}
 
@@ -601,45 +570,45 @@ export function AIChatAssistant({
           {loading && (
             <div className="ai-message-row assistant">
               <div className="ai-msg-bubble loading">
-                <span className="typing-dots">Generating explanation...</span>
+                <span className="typing-dots">{t.loading}</span>
               </div>
             </div>
           )}
         </div>
 
         <div className="ai-suggest-chips">
-          <span className="chips-label">{language === 'sw' ? 'Maswali ya haraka:' : 'Quick questions:'}</span>
-          {suggestions.map(chip => (
+          <button type="button" className="chips-label quick-toggle" aria-expanded={quickOpen} aria-label={quickOpen ? t.collapse : t.expand} onClick={() => setQuickOpen(value => !value)}>
+            {t.quick} {quickOpen ? '▾' : '▸'}
+          </button>
+          {quickOpen && suggestions.map(chip => (
             <button
-              key={chip}
+              key={chip.intent}
               type="button"
               className="suggest-chip-btn"
               disabled={loading}
-              onClick={() => void handleSend(chip)}
+              onClick={() => void handleSend(chip.label, chip.intent)}
             >
-              💬 {chip}
+              💬 {chip.label}
             </button>
           ))}
         </div>
+
+        {failedQuery && <button type="button" className="button secondary compact ai-retry" disabled={loading || !customEnabled} onClick={() => void handleSend(failedQuery)}>{t.retry}</button>}
 
         <form className="ai-chat-input-row" onSubmit={onSubmit}>
           <input
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder={!online
-              ? 'Ask about the saved recommendation…'
-              : aiEnabled === true
-                ? 'Ask AXIS a question…'
-                : 'Ask for a grounded local explanation…'}
-            disabled={loading}
+            placeholder={!online ? t.offlinePlaceholder : aiEnabled === true ? t.placeholder : t.unavailablePlaceholder}
+            disabled={loading || !customEnabled}
           />
-          <button type="submit" className="button primary compact" disabled={loading || !input.trim()}>
-            {loading ? 'Thinking...' : 'Send'}
+          <button type="submit" className="button primary compact" disabled={loading || !customEnabled || !input.trim()}>
+            {loading ? t.thinking : t.send}
           </button>
         </form>
 
         <p className="ai-disclaimer-footer">
-          The deterministic AXIS recommendation is authoritative. Explanations never change its litres, runtime, or action.
+          {t.disclaimer}
         </p>
       </Card>
     </div>
