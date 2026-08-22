@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -123,6 +124,78 @@ func TestRainRulesAndAnalytics(t *testing.T) {
 	}
 	if len(missingRec.Warnings) == 0 {
 		t.Fatal("missing probability should add a warning")
+	}
+}
+
+func TestAppliedWaterReducesOnlyRemainingRecommendation(t *testing.T) {
+	cat := testCatalog(t)
+	baseline, err := Compute(baseRequest(), dryWeather(), cat, fixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := baseRequest()
+	request.AppliedTodayLitres = 2000
+	withApplied, err := Compute(request, dryWeather(), cat, fixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withApplied.Decision.DailyTargetLitresExact != baseline.Decision.LitresExact {
+		t.Fatalf("daily target changed from %.1f to %.1f", baseline.Decision.LitresExact, withApplied.Decision.DailyTargetLitresExact)
+	}
+	if math.Abs(withApplied.Decision.LitresExact-(baseline.Decision.LitresExact-2000)) > .1 {
+		t.Fatalf("remaining = %.1f", withApplied.Decision.LitresExact)
+	}
+	if withApplied.Decision.AppliedTodayLitres != 2000 {
+		t.Fatalf("applied = %.1f", withApplied.Decision.AppliedTodayLitres)
+	}
+	wantSteps := map[string]bool{"daily_target": false, "applied_today": false, "litres": false}
+	for _, step := range withApplied.Explanation.Steps {
+		if _, ok := wantSteps[step.Key]; ok {
+			wantSteps[step.Key] = true
+		}
+	}
+	for key, found := range wantSteps {
+		if !found {
+			t.Errorf("missing explanation step %s", key)
+		}
+	}
+}
+
+func TestAppliedWaterAtOrAboveTargetClampsToZero(t *testing.T) {
+	baseline, _ := Compute(baseRequest(), dryWeather(), testCatalog(t), fixedNow)
+	for _, applied := range []float64{baseline.Decision.LitresExact, baseline.Decision.LitresExact + 500} {
+		request := baseRequest()
+		request.AppliedTodayLitres = applied
+		rec, err := Compute(request, dryWeather(), testCatalog(t), fixedNow)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rec.Decision.LitresExact != 0 || rec.Decision.Litres != 0 || rec.Decision.Action != "SKIP" || rec.Decision.DurationMinutes != nil {
+			t.Fatalf("applied %.1f produced %+v", applied, rec.Decision)
+		}
+		if !strings.Contains(rec.Decision.Headline, "No additional irrigation") {
+			t.Fatalf("headline = %q", rec.Decision.Headline)
+		}
+	}
+}
+
+func TestRainAndAppliedWaterAreNotDoubleCounted(t *testing.T) {
+	weather := dryWeather()
+	probability := .55
+	weather.RainNext24HMM = 4
+	weather.RainProbability = &probability
+	withoutApplied, _ := Compute(baseRequest(), weather, testCatalog(t), fixedNow)
+	request := baseRequest()
+	request.AppliedTodayLitres = 600
+	withApplied, err := Compute(request, weather, testCatalog(t), fixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withApplied.Decision.RainAdjustmentLitres != withoutApplied.Decision.RainAdjustmentLitres || withApplied.Decision.DailyTargetLitresExact != withoutApplied.Decision.LitresExact {
+		t.Fatalf("rain attribution changed: before=%+v after=%+v", withoutApplied.Decision, withApplied.Decision)
+	}
+	if math.Abs(withApplied.Decision.LitresExact-(withoutApplied.Decision.LitresExact-600)) > .1 {
+		t.Fatalf("remaining = %.1f", withApplied.Decision.LitresExact)
 	}
 }
 
@@ -246,6 +319,39 @@ func TestSensorContextIsValidatedButDoesNotSilentlyChangeLitres(t *testing.T) {
 	}
 	if stale.SensorContext.Status != "STALE" {
 		t.Fatalf("status = %s", stale.SensorContext.Status)
+	}
+}
+
+func TestIrrigationSensorCorroborationIsFactualOnly(t *testing.T) {
+	request := baseRequest()
+	loggedAt := fixedNow.Add(-2 * time.Hour)
+	request.IrrigationContext = &domain.IrrigationContext{
+		LoggedAt: loggedAt.Format(time.RFC3339), Litres: 2000,
+		SensorBefore: &domain.SoilMoistureObservation{SensorID: "sensor-1", ObservedAt: loggedAt.Add(-time.Hour).Format(time.RFC3339), VolumetricWaterContentPC: 24},
+		SensorAfter:  &domain.SoilMoistureObservation{SensorID: "sensor-1", ObservedAt: loggedAt.Add(time.Hour).Format(time.RFC3339), VolumetricWaterContentPC: 24},
+	}
+	baseline, _ := Compute(baseRequest(), dryWeather(), testCatalog(t), fixedNow)
+	rec, err := Compute(request, dryWeather(), testCatalog(t), fixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.SensorContext == nil || rec.SensorContext.IrrigationResponse == nil || rec.SensorContext.IrrigationResponse.Status != "NO_INCREASE" {
+		t.Fatalf("context = %+v", rec.SensorContext)
+	}
+	if rec.Decision.LitresExact != baseline.Decision.LitresExact {
+		t.Fatal("sensor corroboration changed litres")
+	}
+	request.IrrigationContext.SensorAfter.VolumetricWaterContentPC = 27
+	rec, _ = Compute(request, dryWeather(), testCatalog(t), fixedNow)
+	if rec.SensorContext.IrrigationResponse.Status != "INCREASED" || rec.SensorContext.IrrigationResponse.ChangePercentagePoints != 3 {
+		t.Fatalf("increased context = %+v", rec.SensorContext.IrrigationResponse)
+	}
+	request.IrrigationContext.SensorAfter.ObservedAt = fixedNow.Add(-7 * time.Hour).Format(time.RFC3339)
+	request.IrrigationContext.LoggedAt = fixedNow.Add(-8 * time.Hour).Format(time.RFC3339)
+	request.IrrigationContext.SensorBefore.ObservedAt = fixedNow.Add(-9 * time.Hour).Format(time.RFC3339)
+	rec, _ = Compute(request, dryWeather(), testCatalog(t), fixedNow)
+	if rec.SensorContext.IrrigationResponse.Status != "STALE" {
+		t.Fatalf("stale context = %+v", rec.SensorContext.IrrigationResponse)
 	}
 }
 

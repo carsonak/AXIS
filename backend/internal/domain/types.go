@@ -103,17 +103,27 @@ type SoilMoistureObservation struct {
 }
 
 type PreviousRecommendation struct {
-	Date        string  `json:"date"`
-	LitresExact float64 `json:"litres_exact"`
-	ET0MM       float64 `json:"et0_mm,omitempty"`
-	RainMM      float64 `json:"rain_mm,omitempty"`
-	StageID     string  `json:"stage_id,omitempty"`
+	Date                   string   `json:"date"`
+	LitresExact            float64  `json:"litres_exact"`
+	DailyTargetLitresExact *float64 `json:"daily_target_litres_exact,omitempty"`
+	ET0MM                  float64  `json:"et0_mm,omitempty"`
+	RainMM                 float64  `json:"rain_mm,omitempty"`
+	StageID                string   `json:"stage_id,omitempty"`
 }
 
 type RecommendationRequest struct {
 	Plot                   PlotCalculationInput    `json:"plot"`
 	Date                   string                  `json:"date,omitempty"`
+	AppliedTodayLitres     float64                 `json:"applied_today_litres,omitempty"`
+	IrrigationContext      *IrrigationContext      `json:"irrigation_context,omitempty"`
 	PreviousRecommendation *PreviousRecommendation `json:"previous_recommendation,omitempty"`
+}
+
+type IrrigationContext struct {
+	LoggedAt     string                   `json:"logged_at"`
+	Litres       float64                  `json:"litres"`
+	SensorBefore *SoilMoistureObservation `json:"sensor_before,omitempty"`
+	SensorAfter  *SoilMoistureObservation `json:"sensor_after,omitempty"`
 }
 
 type WeatherSnapshot struct {
@@ -128,6 +138,53 @@ type WeatherSnapshot struct {
 	ET0Method          string   `json:"et0_method,omitempty"`
 }
 
+type TimelineHourlyWeather struct {
+	Time                    string   `json:"time"`
+	TemperatureC            *float64 `json:"temperature_c,omitempty"`
+	RelativeHumidityPC      *float64 `json:"relative_humidity_pct,omitempty"`
+	PrecipitationMM         *float64 `json:"precipitation_mm,omitempty"`
+	RainMM                  *float64 `json:"rain_mm,omitempty"`
+	RainProbability         *float64 `json:"rain_probability,omitempty"`
+	WeatherCode             *int     `json:"weather_code,omitempty"`
+	ET0MM                   *float64 `json:"et0_mm,omitempty"`
+	VapourPressureDeficit   *float64 `json:"vapour_pressure_deficit_kpa,omitempty"`
+	WindMS                  *float64 `json:"wind_ms,omitempty"`
+	SoilTemperatureC        *float64 `json:"soil_temperature_c,omitempty"`
+	ModeledSoilMoistureM3M3 *float64 `json:"modeled_soil_moisture_m3_m3,omitempty"`
+}
+
+type TimelineDailySummary struct {
+	TMinC                   *float64 `json:"t_min_c,omitempty"`
+	TMaxC                   *float64 `json:"t_max_c,omitempty"`
+	RainMM                  *float64 `json:"rain_mm,omitempty"`
+	RainProbability         *float64 `json:"rain_probability,omitempty"`
+	ET0MM                   *float64 `json:"et0_mm,omitempty"`
+	MeanRelativeHumidityPC  *float64 `json:"mean_relative_humidity_pct,omitempty"`
+	MeanWindMS              *float64 `json:"mean_wind_ms,omitempty"`
+	MeanSoilTemperatureC    *float64 `json:"mean_soil_temperature_c,omitempty"`
+	MeanModeledSoilMoisture *float64 `json:"mean_modeled_soil_moisture_m3_m3,omitempty"`
+}
+
+type TimelineWeatherDay struct {
+	Date                string                    `json:"date"`
+	Kind                string                    `json:"kind"`
+	Source              string                    `json:"source"`
+	ProviderModelRunAt  *string                   `json:"provider_model_run_at,omitempty"`
+	Summary             TimelineDailySummary      `json:"summary"`
+	Hourly              []TimelineHourlyWeather   `json:"hourly"`
+	Recommendation      *IrrigationRecommendation `json:"recommendation,omitempty"`
+	PlanningUnavailable string                    `json:"planning_unavailable,omitempty"`
+}
+
+type WeatherTimelineResponse struct {
+	Timezone string               `json:"timezone"`
+	Days     []TimelineWeatherDay `json:"days"`
+}
+
+type ForecastTimelineRequest struct {
+	Plot PlotCalculationInput `json:"plot"`
+}
+
 type CropStageState struct {
 	ID          string `json:"id"`
 	DisplayName string `json:"display_name"`
@@ -139,6 +196,9 @@ type Decision struct {
 	Action                            string   `json:"action"`
 	Litres                            int      `json:"litres"`
 	LitresExact                       float64  `json:"litres_exact"`
+	DailyTargetLitres                 int      `json:"daily_target_litres"`
+	DailyTargetLitresExact            float64  `json:"daily_target_litres_exact"`
+	AppliedTodayLitres                float64  `json:"applied_today_litres"`
 	GrossDepthMM                      float64  `json:"gross_depth_mm"`
 	ModeledGrossDepthBeforeThreshold  float64  `json:"modeled_gross_depth_before_threshold_mm,omitempty"`
 	DurationMinutes                   *int     `json:"duration_minutes,omitempty"`
@@ -168,10 +228,23 @@ type ConfidenceInfo struct {
 }
 
 type SensorContext struct {
-	SoilMoistureConnected bool   `json:"soil_moisture_connected"`
-	UsedForAdjustment     bool   `json:"used_for_adjustment"`
-	Status                string `json:"status"`
-	Reason                string `json:"reason,omitempty"`
+	SoilMoistureConnected bool                      `json:"soil_moisture_connected"`
+	UsedForAdjustment     bool                      `json:"used_for_adjustment"`
+	Status                string                    `json:"status"`
+	Reason                string                    `json:"reason,omitempty"`
+	IrrigationResponse    *SensorIrrigationResponse `json:"irrigation_response,omitempty"`
+}
+
+type SensorIrrigationResponse struct {
+	Status                 string  `json:"status"`
+	IrrigationLoggedAt     string  `json:"irrigation_logged_at"`
+	IrrigationLitres       float64 `json:"irrigation_litres"`
+	BeforeObservedAt       string  `json:"before_observed_at"`
+	AfterObservedAt        string  `json:"after_observed_at"`
+	BeforeWaterContentPC   float64 `json:"before_water_content_pct"`
+	AfterWaterContentPC    float64 `json:"after_water_content_pct"`
+	ChangePercentagePoints float64 `json:"change_percentage_points"`
+	Observation            string  `json:"observation"`
 }
 
 type ComparisonFactor struct {

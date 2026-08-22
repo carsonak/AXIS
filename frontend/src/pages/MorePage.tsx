@@ -13,6 +13,7 @@ export default function MorePage() {
     { label: '🏠 Landing Page / Home', action: () => navigate('/') },
     { label: 'My Farm', action: () => navigate('/app/plots') },
     { label: 'Crops', action: () => navigate('/app/plots') },
+    { label: 'Weather Timeline', action: () => navigate('/app/weather') },
     { label: 'Irrigation Methods', action: () => navigate('/app/recommendations') },
     { label: 'Units (L, litres, °C)', action: () => setShowUnitsModal(true) },
     { label: 'Notifications', action: () => navigate('/app/alerts') },

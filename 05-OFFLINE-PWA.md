@@ -4,11 +4,11 @@ Offline is a judged product feature, not a late browser optimization.
 
 ## Current implementation
 
-- ✅ Dexie repositories, local plot/recommendation/event/insight/sensor tables, seven-day queries, freshness helpers, and PWA production generation are implemented and pass typecheck/build.
+- ✅ Dexie repositories, local plot/recommendation/event/insight/sensor/decision-snapshot/timeline-weather tables, seven-day queries, freshness helpers, and PWA production generation are implemented and pass typecheck/build.
 - ✅ Today, Weather, and Recommendations share an IndexedDB-first refresh coordinator. Existing advice refreshes hourly while `/app` is active and supports manual refresh.
-- 🟡 Browser timing, reconnect/resume, and force-close/reopen behavior have not been verified on a physical phone.
+- ✅ An isolated deployed browser smoke flow verified responsive timeline interaction and an active-page offline transition. 🟡 Reconnect/resume timing and force-close/reopen behavior have not been verified on a physical phone.
 - 🟡 Offline irrigation recording, history, chart, and manual flow-meter delta paths are implemented but still require the two prescribed device cycles.
-- ⬜ Home-screen installation, storage behavior on a second device, and deployed HTTPS service-worker behavior remain pending.
+- ⬜ Home-screen installation, storage behavior on a second device, and physical-device HTTPS service-worker behavior remain pending.
 - ⛔ There is no backend synchronization queue because farmer data intentionally remains device-local.
 
 ## 1. Device data model
@@ -23,6 +23,8 @@ catalog
 settings
 insights
 sensorReadings
+decisionSnapshots
+timelineWeather
 ```
 
 No outbox is needed in the hackathon MVP because the backend stores no user data. Local writes are final local writes.
@@ -64,6 +66,12 @@ type IrrigationEvent = {
 
 For `FLOW_METER`, `litres = meterEndLitres - meterStartLitres`. Invalid or decreasing cumulative readings are rejected.
 
+### `decisionSnapshots`
+
+Immutable local audit records preserve the recommendation, issuance-time forecast, same-day water-balance outputs, and optional latest soil observation that supported an irrigation decision. An irrigation event and its snapshot are written in one IndexedDB transaction, after the event has been added and the existing same-day balance has been reconciled. Later weather refreshes may replace the current recommendation record but cannot update an earlier snapshot.
+
+Each plot/date may retain multiple `IRRIGATION_EVENT` snapshots. A deterministic final ID permits only one `END_OF_DAY` or `END_OF_DAY_CATCHUP` snapshot. Snapshot rows are added rather than updated.
+
 ### `sensorReadings`
 
 Optional timestamped soil-humidity observations and calibration metadata. The latest reading may be sent with a recommendation, but the sensor-free path remains authoritative whenever it is absent, stale, invalid or not yet backed by a validated adjustment model.
@@ -75,6 +83,10 @@ Optional cached AI explanations. They are derived from deterministic recommendat
 ### `catalog`
 
 Mirror `GET /catalog` so a previously opened app can edit/create a plot offline.
+
+### `timelineWeather`
+
+Cache weather days by plot, coordinates, date, kind, and source. Historical reanalysis is fresh for 30 days and retained for 180 days; current/forecast entries are fresh for 60 minutes and retained for 14 days. Coordinate filtering prevents a moved plot from displaying weather cached for its previous location. Local recommendations, irrigation events, and decision snapshots are merged at render time rather than copied into provider weather rows.
 
 ## 2. UI data rule
 
@@ -145,6 +157,8 @@ After a recommendation exists, the shared `/app` coordinator:
 - stores weather and its deterministic recommendation together only after a successful response.
 
 Browser PWAs cannot guarantee hourly execution while fully closed, so AXIS makes no background-refresh claim.
+
+Daily snapshot finalization follows the same browser constraint. While AXIS is visible it checks during 23:00–23:59 Africa/Nairobi and finalizes every plot with a saved recommendation for that date. On launch, resume, focus, or reconnect it creates clearly labeled catch-up snapshots for unfinished past dates using only the latest recommendation, irrigation events, and sensor context already preserved locally. `capturedAt` is always the real creation time; catch-up records never claim they were captured at midnight. Dates without a saved deterministic recommendation are skipped rather than reconstructed from newer weather.
 
 If the request fails:
 

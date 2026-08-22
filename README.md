@@ -11,6 +11,7 @@ AXIS answers a practical question for a specific plot: how many litres should be
 3. A deterministic agronomy engine derives the crop stage and calculates crop-water replacement, forecast-rain credit, irrigation efficiency, litres, and optional runtime.
 4. The complete recommendation and explanation are stored in device-local IndexedDB so they remain available offline.
 5. While the app is open and online, existing advice refreshes hourly. Farmers can also refresh it manually.
+6. The dedicated Weather Timeline combines Open-Meteo historical reanalysis, KijaniSpace forecast days, local AXIS snapshots, and farmer irrigation events without moving farmer records off-device.
 
 ## Current capabilities
 
@@ -19,11 +20,15 @@ AXIS answers a practical question for a specific plot: how many litres should be
 - Explainable `IRRIGATE`, `REDUCED`, and `SKIP` decisions.
 - KijaniSpace `/v1/agro_climate/land` integration, three-second timeout, memory cache, climatology fallback, and deterministic fixture mode.
 - Offline plots, recommendations, irrigation events, settings, sensor context, and seven-day history.
+- Same-day irrigation feedback: locally logged water is summed per plot and subtracted by the deterministic engine from the weather-adjusted daily target; offline displays are clearly based on the last saved target until reconciliation.
+- Immutable device-local decision snapshots preserve issuance-time weather, recommendation, applied-water balance, and optional soil context for each irrigation event and each finalized day.
+- A vertically scrollable agricultural weather timeline provides expandable hourly history, available multi-day forecasts, and deterministic future irrigation plans with a bounded IndexedDB cache.
+- Deterministic quick explanations remain available offline, while unmatched custom assistant questions use the optional AI provider and show explicit failures instead of fabricated fallback answers.
 - Manual irrigation records and cumulative flow-meter start/end entry.
 - Data source, confidence, last refresh, and provider-model timestamps.
 - Optional AI explanations behind a disabled-by-default server feature flag. AI never calculates or changes irrigation values.
 
-Automated Go checks, frontend typechecking/building, the sanitized live Kijani payload, and the container path are verified. Deployment and physical-device offline acceptance remain separate manual checks; see [the current team handoff](docs/TEAM-HANDOFF.md).
+Automated Go checks, frontend tests/lint/typechecking/building, the sanitized live Kijani payload, the container path, and an isolated Fly/browser smoke flow are verified at their stated levels. Production and physical-device offline acceptance remain separate manual checks; see [the current team handoff](docs/TEAM-HANDOFF.md).
 
 ## Run locally
 
@@ -42,15 +47,7 @@ A source-only checkout embeds a small backend status page. `mise run build` gene
 
 ## Live weather
 
-Supply Kijani credentials through environment configuration:
-
-```bash
-export AXIS_WEATHER_MODE=live
-export KIJANISPACE_API_KEY=replace-me
-mise run run
-```
-
-The default endpoint is `https://api.kijanispace.eu/v1/agro_climate/land`. `KIJANISPACE_API_URL` can override it. The credential value may be HTTP Basic credentials (`username:password`), a prefixed `Basic` or `Bearer` authorization value, or an unprefixed provider token/API key. Never commit credentials.
+The canonical list of environment variables, defaults, accepted formats, and safe placeholders is maintained in [`.env.example`](.env.example). Never commit credentials.
 
 ## Verify changes
 

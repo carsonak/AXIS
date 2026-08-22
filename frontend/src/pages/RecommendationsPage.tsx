@@ -3,15 +3,15 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Alert, AppHeader, Badge, Card, EmptyState, Modal, Page, Spinner, SketchWaterDrop, SketchRain } from '../components'
 
 import { useAxis } from '../context'
-import { repos } from '../db'
+import { decisionSnapshotService } from '../decision-snapshots'
 import { useRecommendationRefresh } from '../recommendation-refresh'
 import { measuredLitres } from '../sensors'
-import type { IrrigationEvent, StoredRecommendation } from '../types'
+import type { IrrigationEvent, Plot, StoredRecommendation } from '../types'
 import { formatLitres, formatWindow, freshness, nairobiDate } from '../utils'
 
 export default function RecommendationsPage() {
   const { selectedPlot, catalog, online } = useAxis()
-  const { recommendation, localReady: loaded, now } = useRecommendationRefresh()
+  const { recommendation, localReady: loaded, now, feedbackPending, refresh } = useRecommendationRefresh()
   const navigate = useNavigate()
   const [showLogModal, setShowLogModal] = useState(false)
 
@@ -62,6 +62,7 @@ export default function RecommendationsPage() {
       />
 
       {!online && <Alert tone="warn" title="Saved offline advice">This recommendation remains available. Reconnect to refresh today’s weather.</Alert>}
+      {feedbackPending && <Alert tone="warn" title="Based on the last available recommendation">Logged irrigation has reduced the saved remaining amount. AXIS will reconcile it with current weather when online.</Alert>}
       <Badge tone={status.tone}>{status.label}</Badge>
 
       {/* Recommendation Card */}
@@ -102,6 +103,12 @@ export default function RecommendationsPage() {
           </p>
         </div>
 
+        <div className="guide-grid" aria-label="Today's irrigation feedback">
+          <div className="guide-row"><span>Calculated daily target</span><strong>{formatLitres(recommendation.decision.daily_target_litres ?? recommendation.decision.litres)}</strong></div>
+          <div className="guide-row"><span>Already irrigated today</span><strong>{formatLitres(recommendation.decision.applied_today_litres ?? 0)}</strong></div>
+          <div className="guide-row"><span>Remaining amount to apply</span><strong>{formatLitres(recommendation.decision.litres)}</strong></div>
+        </div>
+
         {recommendation && recommendation.decision.rain_adjustment_litres > 0 && (
           <div className="rain-avoided-callout">
             <span className="rain-avoided-icon"><SketchRain size={20} color="#1b5e20" /></span>
@@ -109,6 +116,12 @@ export default function RecommendationsPage() {
               <strong>Water avoided because rain was considered:</strong>
               <span>Saved {formatLitres(recommendation.decision.rain_adjustment_litres)} due to forecast rainfall credit.</span>
             </div>
+          </div>
+        )}
+        {recommendation.sensor_context?.irrigation_response && (
+          <div className="rain-avoided-callout">
+            <span className="rain-avoided-icon">ⓘ</span>
+            <div><strong>Soil-moisture context after irrigation</strong><span>{recommendation.sensor_context.irrigation_response.observation} This context did not change litres or runtime.</span></div>
           </div>
         )}
       </Card>
@@ -150,10 +163,11 @@ export default function RecommendationsPage() {
       {showLogModal && recommendation && (
         <IrrigationModal
           recommendation={recommendation}
-          plotId={selectedPlot.id}
+          plot={selectedPlot}
           onClose={() => setShowLogModal(false)}
-          onSaved={() => {
+          onSaved={async () => {
             setShowLogModal(false)
+            await refresh()
             navigate('/app/history')
           }}
         />
@@ -162,7 +176,7 @@ export default function RecommendationsPage() {
   )
 }
 
-function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recommendation: StoredRecommendation; plotId: string; onClose(): void; onSaved(event: IrrigationEvent): void }) {
+function IrrigationModal({ recommendation, plot, onClose, onSaved }: { recommendation: StoredRecommendation; plot: Pick<Plot, 'id' | 'areaM2'>; onClose(): void; onSaved(event: IrrigationEvent): void | Promise<void> }) {
   const [source, setSource] = useState<IrrigationEvent['source']>('FOLLOWED_RECOMMENDATION')
   const [litres, setLitres] = useState(String(recommendation.decision.litres))
   const [meterId, setMeterId] = useState('')
@@ -183,7 +197,7 @@ function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recomme
       if (!Number.isFinite(measured) || measured < 0) throw new Error('Enter a valid applied water volume in litres.')
       const event: IrrigationEvent = {
         id: crypto.randomUUID(),
-        plotId,
+        plotId: plot.id,
         date: nairobiDate(),
         litres: measured,
         recommendedLitres: recommendation.decision.litres_exact,
@@ -193,8 +207,8 @@ function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recomme
         meterStartLitres: source === 'FLOW_METER' ? Number(meterStart) : undefined,
         meterEndLitres: source === 'FLOW_METER' ? Number(meterEnd) : undefined
       }
-      await repos.saveEvent(event)
-      onSaved(event)
+      await decisionSnapshotService.recordIrrigationEvent(event, recommendation, plot)
+      await onSaved(event)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save irrigation record.')
     }

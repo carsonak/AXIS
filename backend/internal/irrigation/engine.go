@@ -39,6 +39,9 @@ func Compute(req domain.RecommendationRequest, weather domain.WeatherSnapshot, c
 	if plot.FlowRateLPM != nil && (*plot.FlowRateLPM <= 0 || *plot.FlowRateLPM > 10000) {
 		return domain.IrrigationRecommendation{}, invalid("VALIDATION_FAILED", "plot.flow_rate_lpm", "flow rate must be greater than zero and at most 10,000 L/min")
 	}
+	if !finite(req.AppliedTodayLitres) || req.AppliedTodayLitres < 0 {
+		return domain.IrrigationRecommendation{}, invalid("VALIDATION_FAILED", "applied_today_litres", "applied water must be a non-negative number")
+	}
 	crop, ok := catalog.FindCrop(cat, plot.CropID)
 	if !ok {
 		return domain.IrrigationRecommendation{}, invalid("UNKNOWN_CROP", "plot.crop_id", "crop is not in the AXIS catalog")
@@ -81,26 +84,33 @@ func Compute(req domain.RecommendationRequest, weather domain.WeatherSnapshot, c
 	baselineDepth := etc / method.Efficiency
 	grossDepthBeforeThreshold := netDepth / method.Efficiency
 	baselineLitres := baselineDepth * plot.AreaM2
-	litresExact := grossDepthBeforeThreshold * plot.AreaM2
+	dailyTargetExact := grossDepthBeforeThreshold * plot.AreaM2
 	action := "IRRIGATE"
-	if rainReduced && litresExact > 0 {
+	if rainReduced && dailyTargetExact > 0 {
 		action = "REDUCED"
 	}
-	grossDepth := grossDepthBeforeThreshold
 	if grossDepthBeforeThreshold < cat.Constants.SkipThresholdMM {
 		action = "SKIP"
-		litresExact = 0
-		grossDepth = 0
+		dailyTargetExact = 0
 	}
-	litres := roundLitres(litresExact)
+	remainingExact := math.Max(0, dailyTargetExact-req.AppliedTodayLitres)
+	if dailyTargetExact > 0 && remainingExact == 0 {
+		action = "SKIP"
+	}
+	grossDepth := 0.0
+	if plot.AreaM2 > 0 {
+		grossDepth = remainingExact / plot.AreaM2
+	}
+	litres := roundLitres(remainingExact)
+	dailyTargetLitres := roundLitres(dailyTargetExact)
 	rainAdjustment := 0.0
 	if rainReduced {
-		rainAdjustment = math.Max(0, baselineLitres-litresExact)
+		rainAdjustment = math.Max(0, baselineLitres-dailyTargetExact)
 	}
 
 	var duration *int
-	if plot.FlowRateLPM != nil && litresExact > 0 {
-		value := roundToInt(litresExact/(*plot.FlowRateLPM), 5)
+	if plot.FlowRateLPM != nil && remainingExact > 0 {
+		value := roundToInt(remainingExact/(*plot.FlowRateLPM), 5)
 		if value == 0 {
 			value = 5
 		}
@@ -109,7 +119,11 @@ func Compute(req domain.RecommendationRequest, weather domain.WeatherSnapshot, c
 	var previousDelta *float64
 	var comparison *domain.PreviousComparison
 	if req.PreviousRecommendation != nil {
-		value := litresExact - req.PreviousRecommendation.LitresExact
+		previousTarget := req.PreviousRecommendation.LitresExact
+		if req.PreviousRecommendation.DailyTargetLitresExact != nil {
+			previousTarget = *req.PreviousRecommendation.DailyTargetLitresExact
+		}
+		value := dailyTargetExact - previousTarget
 		previousDelta = &value
 		comparison = buildComparison(value, et0, weather.RainNext24HMM, stageID, *req.PreviousRecommendation)
 	}
@@ -123,17 +137,23 @@ func Compute(req domain.RecommendationRequest, weather domain.WeatherSnapshot, c
 		return domain.IrrigationRecommendation{}, err
 	}
 	warnings = append(warnings, sensorWarnings...)
+	if err := addIrrigationSensorResponse(sensorContext, req.IrrigationContext, generatedAt); err != nil {
+		return domain.IrrigationRecommendation{}, err
+	}
 
 	stageName := stageDisplayName(cat, stageID)
 	decision := domain.Decision{
 		Action:                            action,
 		Litres:                            litres,
-		LitresExact:                       round(litresExact, 1),
+		LitresExact:                       round(remainingExact, 1),
+		DailyTargetLitres:                 dailyTargetLitres,
+		DailyTargetLitresExact:            round(dailyTargetExact, 1),
+		AppliedTodayLitres:                round(req.AppliedTodayLitres, 1),
 		GrossDepthMM:                      round(grossDepth, 1),
 		ModeledGrossDepthBeforeThreshold:  round(grossDepthBeforeThreshold, 2),
 		DurationMinutes:                   duration,
 		RecommendedWindow:                 method.PreferredWindow,
-		Headline:                          headline(action, litres, method.PreferredWindow),
+		Headline:                          headline(action, litres, method.PreferredWindow, dailyTargetExact > 0 && remainingExact == 0),
 		BaselineLitresNoRain:              round(baselineLitres, 1),
 		RainAdjustmentLitres:              round(rainAdjustment, 1),
 		PreviousRecommendationDeltaLitres: previousDelta,
@@ -151,10 +171,14 @@ func Compute(req domain.RecommendationRequest, weather domain.WeatherSnapshot, c
 		{Key: "efficiency", Label: method.DisplayName + " efficiency", Value: round(method.Efficiency*100, 0), Unit: "%"},
 		{Key: "area", Label: "Plot area", Value: round(plot.AreaM2, 1), Unit: "m²"},
 		{Key: "baseline", Label: "Without forecast rain", Value: round(baselineLitres, 1), Unit: "L"},
-		{Key: "litres", Label: "Water to apply", Value: round(litresExact, 1), Unit: "L"},
+		{Key: "daily_target", Label: "Today's adjusted target", Value: round(dailyTargetExact, 1), Unit: "L"},
+		{Key: "applied_today", Label: "Already irrigated today", Value: round(req.AppliedTodayLitres, 1), Unit: "L"},
+		{Key: "litres", Label: "Remaining amount to apply", Value: round(remainingExact, 1), Unit: "L"},
 	}
-	if action == "SKIP" {
+	if dailyTargetExact == 0 {
 		steps[len(steps)-1].Note = fmt.Sprintf("Modeled depth %.2f mm is below the %.1f mm action threshold.", grossDepthBeforeThreshold, cat.Constants.SkipThresholdMM)
+	} else if remainingExact == 0 {
+		steps[len(steps)-1].Note = "Logged irrigation meets or exceeds today's adjusted target; no additional irrigation is recommended."
 	}
 
 	return domain.IrrigationRecommendation{
@@ -168,7 +192,7 @@ func Compute(req domain.RecommendationRequest, weather domain.WeatherSnapshot, c
 		Decision: decision,
 		Weather:  weather,
 		Explanation: domain.Explanation{
-			Summary: "AXIS estimates daily crop water use, subtracts qualifying forecast rain, adjusts for irrigation efficiency, and converts the result to litres.",
+			Summary: "AXIS calculates today's crop-water target from weather, crop stage, area, and irrigation efficiency, then subtracts water already logged today to show the remaining amount.",
 			Steps:   steps,
 		},
 		Confidence:    domain.ConfidenceInfo{Level: confidence, Reasons: reasons},
@@ -343,6 +367,60 @@ func evaluateSensorContext(obs *domain.SoilMoistureObservation, now time.Time) (
 	return &domain.SensorContext{SoilMoistureConnected: true, UsedForAdjustment: false, Status: "CALIBRATED_PREVIEW", Reason: "Calibration is valid; the adjustment model remains feature-gated pending agronomic validation."}, []string{"Calibrated sensor detected. Sensor adjustment is in preview and did not change the deterministic recommendation."}, nil
 }
 
+func addIrrigationSensorResponse(sensorContext *domain.SensorContext, input *domain.IrrigationContext, now time.Time) error {
+	if input == nil {
+		return nil
+	}
+	if !finite(input.Litres) || input.Litres < 0 {
+		return invalid("VALIDATION_FAILED", "irrigation_context.litres", "logged irrigation must be a non-negative number")
+	}
+	loggedAt, err := time.Parse(time.RFC3339, input.LoggedAt)
+	if err != nil {
+		return invalid("VALIDATION_FAILED", "irrigation_context.logged_at", "irrigation time must be RFC3339")
+	}
+	if input.SensorBefore == nil || input.SensorAfter == nil {
+		return nil
+	}
+	before, after := input.SensorBefore, input.SensorAfter
+	if before.SensorID == "" || before.SensorID != after.SensorID {
+		return invalid("VALIDATION_FAILED", "irrigation_context.sensor_after.sensor_id", "before and after readings must come from the same sensor")
+	}
+	for field, observation := range map[string]*domain.SoilMoistureObservation{"sensor_before": before, "sensor_after": after} {
+		if !finite(observation.VolumetricWaterContentPC) || observation.VolumetricWaterContentPC < 0 || observation.VolumetricWaterContentPC > 100 {
+			return invalid("VALIDATION_FAILED", "irrigation_context."+field+".volumetric_water_content_pct", "soil moisture must be between 0 and 100 percent")
+		}
+	}
+	beforeAt, err := time.Parse(time.RFC3339, before.ObservedAt)
+	if err != nil {
+		return invalid("VALIDATION_FAILED", "irrigation_context.sensor_before.observed_at", "sensor observation time must be RFC3339")
+	}
+	afterAt, err := time.Parse(time.RFC3339, after.ObservedAt)
+	if err != nil {
+		return invalid("VALIDATION_FAILED", "irrigation_context.sensor_after.observed_at", "sensor observation time must be RFC3339")
+	}
+	if beforeAt.After(loggedAt) || afterAt.Before(loggedAt) {
+		return invalid("VALIDATION_FAILED", "irrigation_context", "sensor readings must surround the logged irrigation time")
+	}
+	change := after.VolumetricWaterContentPC - before.VolumetricWaterContentPC
+	status := "INCREASED"
+	observation := "The latest soil-moisture reading after irrigation is higher than the last reading before irrigation."
+	if now.Sub(afterAt) > 6*time.Hour {
+		status = "STALE"
+		observation = "The post-irrigation soil-moisture reading is older than six hours, so AXIS does not draw a strong conclusion from it."
+	} else if change <= 0 {
+		status = "NO_INCREASE"
+		observation = "The latest available sensor reading after irrigation does not show an increase in soil moisture; check the setup and conditions before drawing a conclusion."
+	}
+	sensorContext.SoilMoistureConnected = true
+	sensorContext.IrrigationResponse = &domain.SensorIrrigationResponse{
+		Status: status, IrrigationLoggedAt: loggedAt.UTC().Format(time.RFC3339), IrrigationLitres: round(input.Litres, 1),
+		BeforeObservedAt: beforeAt.UTC().Format(time.RFC3339), AfterObservedAt: afterAt.UTC().Format(time.RFC3339),
+		BeforeWaterContentPC: round(before.VolumetricWaterContentPC, 2), AfterWaterContentPC: round(after.VolumetricWaterContentPC, 2),
+		ChangePercentagePoints: round(change, 2), Observation: observation,
+	}
+	return nil
+}
+
 func stageDisplayName(cat domain.Catalog, id string) string {
 	for _, stage := range cat.StageModel.CanonicalStages {
 		if stage.ID == id {
@@ -352,8 +430,11 @@ func stageDisplayName(cat domain.Catalog, id string) string {
 	return strings.Title(id)
 }
 
-func headline(action string, litres int, window string) string {
+func headline(action string, litres int, window string, alreadyApplied bool) string {
 	if action == "SKIP" {
+		if alreadyApplied {
+			return "No additional irrigation is recommended; today's logged water meets or exceeds the adjusted target."
+		}
 		return "Skip irrigation today; the modeled requirement is below the action threshold."
 	}
 	verb := "Apply"

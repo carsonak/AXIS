@@ -23,6 +23,11 @@ description = "Lint the TypeScript and React frontend"
 dir = "frontend"
 run = "npm run lint"
 
+[tasks.frontend-test]
+description = "Run frontend unit and component tests"
+dir = "frontend"
+run = "npm test"
+
 [tasks.backend]
 description = "Build the backend server"
 env = { GOCACHE = "/tmp/axis-go-cache" }
@@ -30,7 +35,7 @@ run = "go build -o /tmp/axis-server ./backend/cmd/server"
 
 [tasks.check]
 description = "Run all repository checks"
-depends = ["test", "lint", "build"]
+depends = ["test", "frontend-test", "lint", "build"]
 
 [tasks.build]
 description = "Build the frontend and backend"

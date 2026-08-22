@@ -1,7 +1,9 @@
+import { useEffect } from 'react';
 import { Routes, Route, Outlet, Navigate } from 'react-router-dom';
 import { BottomNav, Spinner, AIChatAssistant, NetworkStatusDot } from './components';
 import { useAxis } from './context';
 import { RecommendationRefreshProvider, useRecommendationRefresh } from './recommendation-refresh';
+import { decisionSnapshotService } from './decision-snapshots';
 import LandingPage from './pages/LandingPage';
 import TodayPage from './pages/TodayPage';
 import PlotsPage from './pages/PlotsPage';
@@ -18,6 +20,7 @@ import './App.css';
 
 export default function App() {
   const { ready } = useAxis()
+  useDailyFinalization(ready)
 
   if (!ready) {
     return <div className="boot"><Spinner label="Opening your saved farm data…" /></div>
@@ -46,6 +49,30 @@ export default function App() {
       <Route path="*" element={<Navigate to="/app" replace />} />
     </Routes>
   );
+}
+
+function useDailyFinalization(ready: boolean) {
+  useEffect(() => {
+    if (!ready) return
+    const run = () => {
+      if (document.visibilityState !== 'visible') return
+      void decisionSnapshotService.finalizeEligibleDays().catch(() => {
+        console.error('Daily decision snapshot finalization failed.')
+      })
+    }
+    const onVisibilityChange = () => { if (document.visibilityState === 'visible') run() }
+    run()
+    const interval = window.setInterval(run, 60_000)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('focus', run)
+    window.addEventListener('online', run)
+    return () => {
+      window.clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('focus', run)
+      window.removeEventListener('online', run)
+    }
+  }, [ready])
 }
 
 function AppLayout() {

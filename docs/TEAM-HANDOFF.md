@@ -10,7 +10,31 @@ Legend: ✅ verified; 🟡 implemented but manually unverified; ↪ changed from
 - ✅ Kijani uses the `/v1/agro_climate/land` endpoint and request-time-aligned rolling hourly forecasts.
 - 🟡 The IndexedDB-first PWA, hourly foreground refresh, reconnect/resume refresh, manual refresh, history, plots, settings, and irrigation logging are implemented but still need browser and physical-device acceptance.
 - ⛔ AI remains disabled by default; soil-humidity adjustment and automatic sensor/flow-meter ingestion remain gated.
-- ⬜ Fly configuration/deployment, deployed HTTPS smoke testing, two offline force-close/reopen cycles, second-device testing, rehearsal, recording, and submission are not verified in this repository.
+- ✅ The isolated `axis-irrigation-dev` Fly deployment, HTTPS health endpoint, live Kijani request, deterministic irrigation-feedback request, and safe JSON rejection wording have recorded verification.
+- ✅ The agricultural weather timeline, Open-Meteo history, Kijani multi-day forecast, deterministic future planning, local container path, and isolated Fly/browser smoke flow have recorded verification.
+- ⬜ Browser acceptance, two offline force-close/reopen cycles, second-device testing, rehearsal, recording, and submission are not verified in this repository.
+
+## Fly weather finding — 2026-08-22
+
+The deployed `axis-irrigation` app reports live weather mode, but `flyctl secrets list --app axis-irrigation` confirms that `KIJANISPACE_API_KEY` is absent. This is the root cause of the observed climatology fallback: the live provider rejects the request locally as unconfigured, and the previously deployed fallback chain does not log that error. Configure the credential without exposing it in shell history or documentation, then deploy this branch and verify that a Kisumu recommendation reports `weather.source: KIJANISPACE` or emits one of the new safe failure categories.
+
+The isolated Fly app `axis-irrigation-dev` does not affect production. Its nine staged variables, including the dev-only AI timeout, report `Deployed`; their values were never printed. `GET /api/v1/health` returned `status: ok`, live weather mode, and AI enabled.
+
+The initially staged Kijani URL ended in `/v1/agro_climate/water`. Authentication succeeded, but the provider returned HTTP 400 with the safe diagnostic `not water` for the Kisumu land coordinate. After changing only the dev app URL to `/v1/agro_climate/land`, the same stateless request returned `weather.source: KIJANISPACE`, provider time `2026-08-21T20:52:00Z`, and a 0.1 mm forecast. This proves the dev fallback was an endpoint/coordinate-kind mismatch, not an authentication failure. The new production logger did not expose credentials, authorization headers, request bodies, or provider response bodies.
+
+The deployed irrigation-feedback smoke test returned a positive daily target, subtracted logged water once, and returned `SKIP`, zero remaining litres, no runtime, and the already-applied headline when 12,000 L exceeded the 11,000 L rounded target. Unknown IndexedDB metadata and malformed JSON both returned HTTP 400 with distinct safe wording. The staged AI provider remained unavailable across two attempts because its request exceeded the server's eight-second timeout; the endpoint returned the explicit safe 502 response and left the deterministic recommendation unchanged.
+
+## Fly AI timeout finding — 2026-08-22
+
+The configurable AI timeout and structured provider-failure classification were deployed to `axis-irrigation-dev`. With the then-default 30-second timeout, a stateless English insight request succeeded with HTTP 200 in 8.09 seconds. The dev-only `AXIS_AI_TIMEOUT` setting was then changed to `20s`; the same request returned a safe timeout response after 20.27 seconds. The corresponding application log classified it as `TIMEOUT` with `duration_ms: 20000`, while startup reported an AI timeout of 20 seconds and a server write timeout of 25 seconds. After the final build was deployed, another request at the 20-second setting succeeded with HTTP 200 in 11.89 seconds. The code default was subsequently changed to 20 seconds. This confirms the earlier 20-second result was the AI client deadline rather than the server write deadline, and shows substantial provider latency variance between consecutive requests.
+
+## Weather timeline verification — 2026-08-22
+
+`mise run check` passed Go tests/vet, 31 frontend tests, lint, typecheck, frontend production/PWA build, and backend build. The repository `Containerfile` built as image `axis-weather-timeline:local`; its fixture-mode health, three-day historical response, six-day current/forecast response, zero future applied-water value, deterministic future recommendations, and `/app/weather` SPA fallback passed localhost smoke tests. The existing locked dependencies reported one pre-existing critical npm audit finding; no dependency or lockfile changes were made for this feature.
+
+Fly release v9 (`deployment-01M0KWS42FXFEETRNG1VZ67VSV`) was deployed only to `axis-irrigation-dev`; v7 was recorded before the timeline deployments as the original rollback point. The Johannesburg machine started with its health check passing. HTTPS health reported live weather mode and AI enabled. A Kisumu historical request returned 17–21 August as five `OPEN_METEO` days, each with 24 Nairobi-local hourly rows, ET₀, and modeled shallow soil context. The live Kijani endpoint returned 22–27 August as one current plus five forecast days. Every future recommendation used `applied_today_litres: 0`, the configured `EARLY_MORNING` window, and provider-supplied dates; no climatology days were manufactured.
+
+A transient Playwright/Chromium run outside the repository exercised the deployed app at a 390×844 viewport: created a Kisumu tomato plot, generated today's advice, opened `/app/weather`, found 11 initial date cards, expanded hourly history, loaded one older 10-day block to 21 unique cards, and rendered five future plans. With browser network access then disabled, the offline banner and cached Open-Meteo/Kijani cards remained visible. No console or page errors were recorded. This verifies the active-page offline transition, not a physical-device force-close/reopen cycle.
 
 ## Temporary ownership
 
@@ -30,7 +54,8 @@ Ownership describes coordination, not permission to ignore cross-cutting contrac
 - [ ] Record irrigation offline and confirm it remains after reopening.
 - [ ] Repeat the critical flow on a second device or browser profile.
 - [ ] Independently review crop coefficients and the golden Kisumu agronomy result.
-- [ ] Add deployment configuration only when deployment is authorized; then verify `/api/v1/health`, static routing, HTTPS, and live Kijani from the deployed service.
+- [x] Verify `/api/v1/health`, HTTPS, live Kijani, irrigation feedback, and JSON validation on the isolated dev deployment.
+- [ ] Verify browser static routing and the complete browser flow against the isolated dev deployment.
 - [ ] Rehearse and record the exact demo flow before making a release/submission claim.
 
 ## Handoff commands

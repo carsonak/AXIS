@@ -36,22 +36,65 @@ export interface Recommendation {
   decision: {
     action: 'IRRIGATE' | 'REDUCED' | 'SKIP'; litres: number; litres_exact: number; gross_depth_mm: number
     modeled_gross_depth_before_threshold_mm?: number; duration_minutes?: number; recommended_window: string; headline: string
+    daily_target_litres: number; daily_target_litres_exact: number; applied_today_litres: number
     baseline_litres_no_rain: number; rain_adjustment_litres: number; previous_recommendation_delta_litres?: number
   }
   weather: WeatherSummary
   explanation: { summary: string; steps: Array<{ key: string; label: string; value: number; unit: string; note?: string }> }
   confidence: { level: 'HIGH' | 'MEDIUM' | 'LOW'; reasons: string[] }
-  sensor_context?: { soil_moisture_connected: boolean; used_for_adjustment: boolean; status: string; reason?: string }
+  sensor_context?: {
+    soil_moisture_connected: boolean; used_for_adjustment: boolean; status: string; reason?: string
+    irrigation_response?: {
+      status: 'INCREASED' | 'NO_INCREASE' | 'STALE'; irrigation_logged_at: string; irrigation_litres: number
+      before_observed_at: string; after_observed_at: string; before_water_content_pct: number; after_water_content_pct: number
+      change_percentage_points: number; observation: string
+    }
+  }
   comparison?: { summary: string; factors: Array<{ key: string; label: string; change?: number; unit?: string; direction: string; note?: string }> }
   warnings: string[]
 }
 
 export interface StoredRecommendation extends Recommendation { id: string; savedAt: string }
 
+export type DecisionSnapshotTrigger = 'IRRIGATION_EVENT' | 'END_OF_DAY' | 'END_OF_DAY_CATCHUP'
+
+export interface DecisionSnapshot {
+  id: string
+  plotId: string
+  localDate: string
+  capturedAt: string
+  trigger: DecisionSnapshotTrigger
+  irrigationEventId?: string
+  recommendation: Omit<Recommendation, 'weather'>
+  weather: WeatherSummary
+  waterBalance: {
+    dailyTargetLitres: number
+    appliedBeforeEventLitres: number
+    eventAppliedLitres?: number
+    cumulativeAppliedLitres: number
+    remainingLitres: number
+    action: Recommendation['decision']['action']
+    durationMinutes?: number
+  }
+  latestSoilMoisture?: SoilMoistureReading
+  sourceMetadata: {
+    recommendationGeneratedAt: string
+    recommendationSavedAt: string
+    weatherProviderObservedAt?: string
+    weatherSource: WeatherSource
+  }
+}
+
 export interface IrrigationEvent {
   id: string; plotId: string; date: string; litres: number; recommendedLitres?: number
   source: 'FOLLOWED_RECOMMENDATION' | 'MANUAL' | 'FLOW_METER'
   createdAt: string; meterId?: string; meterStartLitres?: number; meterEndLitres?: number
+}
+
+export interface IrrigationSensorContext {
+  event: IrrigationEvent
+  before?: SoilMoistureReading
+  after?: SoilMoistureReading
 }
 
 export interface Settings {
@@ -68,3 +111,30 @@ export interface StoredInsight {
 
 
 export interface APIError { error: { code: string; message: string; field?: string } }
+
+export type TimelineDayKind = 'HISTORICAL' | 'CURRENT' | 'FORECAST'
+export type TimelineWeatherSource = 'OPEN_METEO' | 'KIJANISPACE'
+
+export interface TimelineHourlyWeather {
+  time: string
+  temperature_c?: number; relative_humidity_pct?: number; precipitation_mm?: number; rain_mm?: number
+  rain_probability?: number; weather_code?: number; et0_mm?: number; vapour_pressure_deficit_kpa?: number
+  wind_ms?: number; soil_temperature_c?: number; modeled_soil_moisture_m3_m3?: number
+}
+
+export interface TimelineDailySummary {
+  t_min_c?: number; t_max_c?: number; rain_mm?: number; rain_probability?: number; et0_mm?: number
+  mean_relative_humidity_pct?: number; mean_wind_ms?: number; mean_soil_temperature_c?: number
+  mean_modeled_soil_moisture_m3_m3?: number
+}
+
+export interface TimelineWeatherDay {
+  date: string; kind: TimelineDayKind; source: TimelineWeatherSource; provider_model_run_at?: string
+  summary: TimelineDailySummary; hourly: TimelineHourlyWeather[]; recommendation?: Recommendation; planning_unavailable?: string
+}
+
+export interface WeatherTimelineResponse { timezone: 'Africa/Nairobi'; days: TimelineWeatherDay[] }
+
+export interface TimelineWeatherRecord extends TimelineWeatherDay {
+  id: string; plotId: string; lat: number; lon: number; fetchedAt: string; expiresAt: string
+}
