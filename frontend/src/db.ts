@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { CatalogResponse, IrrigationEvent, Plot, Recommendation, Settings, SoilMoistureReading, StoredInsight, StoredRecommendation } from './types'
+import type { CatalogResponse, IrrigationEvent, IrrigationSensorContext, Plot, Recommendation, Settings, SoilMoistureReading, StoredInsight, StoredRecommendation } from './types'
 
 interface CatalogRecord { id: 'catalog'; value: CatalogResponse; savedAt: string }
 
@@ -69,6 +69,13 @@ export const repos = {
     const values = await db.irrigationEvents.where('plotId').equals(plotId).toArray()
     return values.filter(v => v.date >= since).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   },
+  async eventsForPlotDate(plotId: string, date: string) {
+    return db.irrigationEvents.where('[plotId+date]').equals([plotId, date]).sortBy('createdAt')
+  },
+  async appliedForPlotDate(plotId: string, date: string) {
+    const events = await db.irrigationEvents.where('[plotId+date]').equals([plotId, date]).toArray()
+    return sumAppliedEvents(events, plotId, date)
+  },
   async latestEvent(plotId: string) {
     const values = await db.irrigationEvents.where('plotId').equals(plotId).toArray()
     return values.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
@@ -79,5 +86,24 @@ export const repos = {
   async latestSensorReading(plotId: string) {
     const values = await db.sensorReadings.where('plotId').equals(plotId).toArray()
     return values.sort((a, b) => b.observedAt.localeCompare(a.observedAt))[0]
+  },
+  async irrigationSensorContext(plotId: string, date: string): Promise<IrrigationSensorContext | undefined> {
+    const [events, readings] = await Promise.all([
+      db.irrigationEvents.where('[plotId+date]').equals([plotId, date]).toArray(),
+      db.sensorReadings.where('plotId').equals(plotId).toArray()
+    ])
+    const event = events.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0]
+    if (!event) return undefined
+    const eventTime = Date.parse(event.createdAt)
+    const before = readings.filter(reading => Date.parse(reading.observedAt) <= eventTime).sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))[0]
+    if (!before) return { event }
+    const after = readings
+      .filter(reading => reading.sensorId === before.sensorId && Date.parse(reading.observedAt) >= eventTime)
+      .sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))[0]
+    return { event, before, after }
   }
+}
+
+export function sumAppliedEvents(events: IrrigationEvent[], plotId: string, date: string) {
+  return events.filter(event => event.plotId === plotId && event.date === date).reduce((sum, event) => sum + event.litres, 0)
 }
