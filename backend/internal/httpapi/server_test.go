@@ -24,11 +24,45 @@ type recordingWeatherProvider struct {
 
 type recordingInsightProvider struct {
 	input domain.InsightRequest
+	err   error
 }
 
 func (p *recordingInsightProvider) Generate(_ context.Context, input domain.InsightRequest) (domain.InsightResponse, error) {
 	p.input = input
+	if p.err != nil {
+		return domain.InsightResponse{}, p.err
+	}
 	return domain.InsightResponse{Summary: "Grounded answer.", Observations: []string{}, Language: input.Language, GeneratedAt: time.Date(2026, 8, 20, 15, 10, 0, 0, time.UTC), Label: "AI-generated explanation"}, nil
+}
+
+func TestInsightProviderErrorsHaveDistinctSafeResponses(t *testing.T) {
+	tests := []struct {
+		kind       insights.FailureKind
+		wantStatus int
+		wantCode   string
+	}{
+		{kind: insights.FailureTimeout, wantStatus: http.StatusGatewayTimeout, wantCode: "AI_PROVIDER_TIMEOUT"},
+		{kind: insights.FailureTransport, wantStatus: http.StatusBadGateway, wantCode: "AI_PROVIDER_UNREACHABLE"},
+		{kind: insights.FailureProviderHTTP, wantStatus: http.StatusBadGateway, wantCode: "AI_PROVIDER_REJECTED"},
+		{kind: insights.FailureResponseDecode, wantStatus: http.StatusBadGateway, wantCode: "AI_PROVIDER_INVALID_RESPONSE"},
+		{kind: insights.FailureEmptyResponse, wantStatus: http.StatusBadGateway, wantCode: "AI_PROVIDER_INVALID_RESPONSE"},
+		{kind: insights.FailureRequestBuild, wantStatus: http.StatusBadGateway, wantCode: "AI_PROVIDER_CONFIG_ERROR"},
+	}
+	for _, tc := range tests {
+		t.Run(string(tc.kind), func(t *testing.T) {
+			server := testServer(t)
+			server.Insights = &recordingInsightProvider{err: &insights.ProviderError{Kind: tc.kind}}
+			req := httptest.NewRequest(http.MethodPost, "/api/v1/insights", bytes.NewBufferString(`{"question":"Explain this","recommendation":{},"history":[]}`))
+			rec := httptest.NewRecorder()
+			server.Handler().ServeHTTP(rec, req)
+			if rec.Code != tc.wantStatus || !strings.Contains(rec.Body.String(), `"code":"`+tc.wantCode+`"`) {
+				t.Fatalf("response = %d: %s, want %d %s", rec.Code, rec.Body.String(), tc.wantStatus, tc.wantCode)
+			}
+			if strings.Contains(rec.Body.String(), "provider-request") {
+				t.Fatalf("response leaked provider details: %s", rec.Body.String())
+			}
+		})
+	}
 }
 
 func (p *recordingWeatherProvider) Daily(_ context.Context, _, _ float64, requestedAt time.Time) (domain.WeatherSnapshot, error) {

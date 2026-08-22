@@ -138,11 +138,44 @@ func (s *Server) insight(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "AI_INSIGHTS_DISABLED", "AI insights are not enabled for this deployment.", "")
 			return
 		}
-		s.logger().Warn("AI insight failed", "error", err)
-		writeError(w, http.StatusBadGateway, "AI_INSIGHT_FAILED", "AI explanation is temporarily unavailable; the deterministic recommendation is unchanged.", "")
+		attributes := []any{"category", "UNKNOWN", "error", err}
+		var providerError *insights.ProviderError
+		if errors.As(err, &providerError) {
+			attributes = []any{
+				"category", providerError.Kind,
+				"status_code", providerError.StatusCode,
+				"provider_request_id", providerError.RequestID,
+				"duration_ms", providerError.Duration.Milliseconds(),
+				"error", err,
+			}
+		}
+		s.logger().Warn("AI insight failed", attributes...)
+		status, code, message := classifyInsightError(err)
+		writeError(w, status, code, message, "")
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+func classifyInsightError(err error) (int, string, string) {
+	var providerError *insights.ProviderError
+	if !errors.As(err, &providerError) {
+		return http.StatusBadGateway, "AI_INSIGHT_FAILED", "AI explanation is temporarily unavailable; the deterministic recommendation is unchanged."
+	}
+	switch providerError.Kind {
+	case insights.FailureTimeout:
+		return http.StatusGatewayTimeout, "AI_PROVIDER_TIMEOUT", "The AI provider took too long to respond; the deterministic recommendation is unchanged."
+	case insights.FailureTransport:
+		return http.StatusBadGateway, "AI_PROVIDER_UNREACHABLE", "The AI provider could not be reached; the deterministic recommendation is unchanged."
+	case insights.FailureProviderHTTP:
+		return http.StatusBadGateway, "AI_PROVIDER_REJECTED", "The AI provider rejected the explanation request; the deterministic recommendation is unchanged."
+	case insights.FailureResponseDecode, insights.FailureEmptyResponse:
+		return http.StatusBadGateway, "AI_PROVIDER_INVALID_RESPONSE", "The AI provider returned an unusable response; the deterministic recommendation is unchanged."
+	case insights.FailureRequestBuild:
+		return http.StatusBadGateway, "AI_PROVIDER_CONFIG_ERROR", "The AI provider is misconfigured; the deterministic recommendation is unchanged."
+	default:
+		return http.StatusBadGateway, "AI_INSIGHT_FAILED", "AI explanation is temporarily unavailable; the deterministic recommendation is unchanged."
+	}
 }
 
 func decodeJSON(r *http.Request, target any) error {

@@ -54,6 +54,10 @@ mise run run
 
 The default endpoint is `https://api.kijanispace.eu/v1/agro_climate/land`. `KIJANISPACE_API_URL` can override it. The credential value may be HTTP Basic credentials (`username:password`), a prefixed `Basic` or `Bearer` authorization value, or an unprefixed provider token/API key. Never commit credentials.
 
+## Optional AI explanations
+
+AI explanations remain disabled unless `AXIS_AI_INSIGHTS_ENABLED=true` and the endpoint, API key, and model variables shown in `.env.example` are configured. `AXIS_AI_TIMEOUT` accepts a positive Go duration such as `20s` or `1m` and defaults to `30s`. Provider timeouts, network failures, HTTP rejections, malformed responses, and empty responses receive distinct safe error codes and structured log categories; credentials, authorization headers, request bodies, and provider response bodies are not logged.
+
 ## Verify changes
 
 ```bash

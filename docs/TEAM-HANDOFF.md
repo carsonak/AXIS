@@ -17,11 +17,15 @@ Legend: ✅ verified; 🟡 implemented but manually unverified; ↪ changed from
 
 The deployed `axis-irrigation` app reports live weather mode, but `flyctl secrets list --app axis-irrigation` confirms that `KIJANISPACE_API_KEY` is absent. This is the root cause of the observed climatology fallback: the live provider rejects the request locally as unconfigured, and the previously deployed fallback chain does not log that error. Configure the credential without exposing it in shell history or documentation, then deploy this branch and verify that a Kisumu recommendation reports `weather.source: KIJANISPACE` or emits one of the new safe failure categories.
 
-The isolated Fly app `axis-irrigation-dev` was deployed from `fix/weather-chat-irrigation-feedback` and does not affect production. Its eight staged variables report `Deployed`; their values were never printed. `GET /api/v1/health` returned `status: ok`, live weather mode, and AI enabled.
+The isolated Fly app `axis-irrigation-dev` does not affect production. Its nine staged variables, including the dev-only AI timeout, report `Deployed`; their values were never printed. `GET /api/v1/health` returned `status: ok`, live weather mode, and AI enabled.
 
 The initially staged Kijani URL ended in `/v1/agro_climate/water`. Authentication succeeded, but the provider returned HTTP 400 with the safe diagnostic `not water` for the Kisumu land coordinate. After changing only the dev app URL to `/v1/agro_climate/land`, the same stateless request returned `weather.source: KIJANISPACE`, provider time `2026-08-21T20:52:00Z`, and a 0.1 mm forecast. This proves the dev fallback was an endpoint/coordinate-kind mismatch, not an authentication failure. The new production logger did not expose credentials, authorization headers, request bodies, or provider response bodies.
 
 The deployed irrigation-feedback smoke test returned a positive daily target, subtracted logged water once, and returned `SKIP`, zero remaining litres, no runtime, and the already-applied headline when 12,000 L exceeded the 11,000 L rounded target. Unknown IndexedDB metadata and malformed JSON both returned HTTP 400 with distinct safe wording. The staged AI provider remained unavailable across two attempts because its request exceeded the server's eight-second timeout; the endpoint returned the explicit safe 502 response and left the deterministic recommendation unchanged.
+
+## Fly AI timeout finding — 2026-08-22
+
+The configurable AI timeout and structured provider-failure classification were deployed to `axis-irrigation-dev`. With the default 30-second timeout, a stateless English insight request succeeded with HTTP 200 in 8.09 seconds. The dev-only `AXIS_AI_TIMEOUT` setting was then changed to `20s`; the same request returned a safe timeout response after 20.27 seconds. The corresponding application log classified it as `TIMEOUT` with `duration_ms: 20000`, while startup reported an AI timeout of 20 seconds and a server write timeout of 25 seconds. After the final build was deployed, another request at the 20-second setting succeeded with HTTP 200 in 11.89 seconds. This confirms the earlier 20-second result was the AI client deadline rather than the server write deadline, and shows substantial provider latency variance between consecutive requests.
 
 ## Temporary ownership
 

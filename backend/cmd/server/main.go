@@ -41,9 +41,12 @@ func main() {
 	}
 
 	var insightProvider insights.Provider = insights.DisabledProvider{}
+	aiTimeout := insights.DefaultTimeout
 	if strings.EqualFold(os.Getenv("AXIS_AI_INSIGHTS_ENABLED"), "true") && os.Getenv("AXIS_AI_ENDPOINT") != "" && os.Getenv("AXIS_AI_API_KEY") != "" && os.Getenv("AXIS_AI_MODEL") != "" {
+		aiTimeout = durationEnv("AXIS_AI_TIMEOUT", insights.DefaultTimeout, logger)
 		insightProvider = &insights.CompatibleProvider{
 			Endpoint: os.Getenv("AXIS_AI_ENDPOINT"), APIKey: os.Getenv("AXIS_AI_API_KEY"), Model: os.Getenv("AXIS_AI_MODEL"),
+			Timeout: aiTimeout,
 		}
 	}
 	staticFiles, err := web.StaticFiles()
@@ -53,9 +56,13 @@ func main() {
 	}
 	server := &httpapi.Server{Catalog: cat, Weather: weatherProvider, Insights: insightProvider, WeatherMode: mode, Static: staticFiles, Logger: logger}
 	port := env("PORT", "8080")
-	httpServer := &http.Server{Addr: ":" + port, Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
+	writeTimeout := 15 * time.Second
+	if _, enabled := insightProvider.(*insights.CompatibleProvider); enabled && writeTimeout <= aiTimeout {
+		writeTimeout = aiTimeout + 5*time.Second
+	}
+	httpServer := &http.Server{Addr: ":" + port, Handler: server.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: writeTimeout, IdleTimeout: 60 * time.Second}
 	_, aiEnabled := insightProvider.(*insights.CompatibleProvider)
-	logger.Info("AXIS server listening", "port", port, "weather_mode", mode, "kijani_configured", os.Getenv("KIJANISPACE_API_KEY") != "", "ai_enabled", aiEnabled)
+	logger.Info("AXIS server listening", "port", port, "weather_mode", mode, "kijani_configured", os.Getenv("KIJANISPACE_API_KEY") != "", "ai_enabled", aiEnabled, "ai_timeout", aiTimeout.String(), "write_timeout", writeTimeout.String())
 	if err := httpServer.ListenAndServe(); err != nil {
 		logger.Error("server stopped", "error", err)
 		os.Exit(1)
@@ -67,4 +74,17 @@ func env(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func durationEnv(key string, fallback time.Duration, logger *slog.Logger) time.Duration {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	duration, err := time.ParseDuration(value)
+	if err != nil || duration <= 0 {
+		logger.Warn("invalid duration configuration; using default", "key", key, "value", value, "default", fallback)
+		return fallback
+	}
+	return duration
 }

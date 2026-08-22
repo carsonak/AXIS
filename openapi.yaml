@@ -641,6 +641,11 @@ components:
                 - INTERNAL
                 - AI_INSIGHTS_DISABLED
                 - AI_INSIGHT_FAILED
+                - AI_PROVIDER_TIMEOUT
+                - AI_PROVIDER_UNREACHABLE
+                - AI_PROVIDER_REJECTED
+                - AI_PROVIDER_INVALID_RESPONSE
+                - AI_PROVIDER_CONFIG_ERROR
             message:
               type: string
             field:
