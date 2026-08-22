@@ -3,6 +3,7 @@ import type { CatalogResponse, DecisionSnapshot, IrrigationEvent, IrrigationSens
 
 interface CatalogRecord { id: 'catalog'; value: CatalogResponse; savedAt: string }
 
+/** Device-local system of record for farmer data and cached server-derived data. */
 export class AxisDatabase extends Dexie {
   plots!: EntityTable<Plot, 'id'>
   recommendations!: EntityTable<StoredRecommendation, 'id'>
@@ -16,6 +17,7 @@ export class AxisDatabase extends Dexie {
 
   constructor(name = 'axis') {
     super(name)
+    // Dexie schemas are append-only migrations: keep old versions so existing devices upgrade in place.
     this.version(1).stores({
       plots: 'id, updatedAt, cropId',
       recommendations: 'id, plot_id, date, savedAt, [plot_id+date]',
@@ -47,6 +49,7 @@ export class AxisDatabase extends Dexie {
 
 export const db = new AxisDatabase()
 
+/** Creates the persistence boundary used by UI services and permits isolated databases in tests. */
 export function createRepositories(database: AxisDatabase) {
   return {
   async getSettings(): Promise<Settings> {
@@ -58,6 +61,7 @@ export function createRepositories(database: AxisDatabase) {
   async listPlots() { return database.plots.orderBy('updatedAt').reverse().toArray() },
   async getPlot(id: string) { return database.plots.get(id) },
   async savePlot(value: Plot) { await database.plots.put(value) },
+  // Plot deletion owns the local cascade because IndexedDB does not provide foreign keys.
   async removePlot(id: string) {
     await database.transaction('rw', [database.plots, database.recommendations, database.irrigationEvents, database.insights, database.sensorReadings, database.decisionSnapshots, database.timelineWeather], async () => {
       await database.plots.delete(id)
@@ -131,6 +135,7 @@ export function createRepositories(database: AxisDatabase) {
       .sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))[0]
     return { event, before, after }
   },
+  // Snapshots are immutable audit rows; add() deliberately rejects an existing deterministic ID.
   async saveSnapshot(value: DecisionSnapshot) { await database.decisionSnapshots.add(structuredClone(value)); return value },
   async snapshotsForPlot(plotId: string) {
     const values = await database.decisionSnapshots.where('plotId').equals(plotId).toArray()
@@ -149,6 +154,7 @@ export function createRepositories(database: AxisDatabase) {
     return Boolean(value)
   },
   async saveTimelineWeather(values: TimelineWeatherRecord[]) { await database.timelineWeather.bulkPut(values.map(value => structuredClone(value))) },
+  // Coordinates are part of cache identity so an edited/moved plot cannot reuse weather for its old location.
   async timelineWeatherForPlot(plotId: string, lat: number, lon: number) {
     const values = await database.timelineWeather.where('plotId').equals(plotId).toArray()
     return values.filter(value => value.lat === lat && value.lon === lon).sort((a, b) => a.date.localeCompare(b.date))

@@ -23,14 +23,17 @@ const (
 
 var nairobiLocation = time.FixedZone("Africa/Nairobi", 3*60*60)
 
+// HistoricalProvider returns provider-labeled past days; it never supplies recommendation weather fallback.
 type HistoricalProvider interface {
 	History(ctx context.Context, lat, lon float64, start, end time.Time) ([]domain.TimelineWeatherDay, error)
 }
 
+// ForecastSeriesProvider returns only dates actually supplied by the forecast provider.
 type ForecastSeriesProvider interface {
 	ForecastSeries(ctx context.Context, lat, lon float64, requestedAt time.Time) ([]domain.TimelineWeatherDay, error)
 }
 
+// FixtureTimelineProvider supplies deterministic timeline data for tests and fixture-mode demos.
 type FixtureTimelineProvider struct{}
 
 func (FixtureTimelineProvider) History(_ context.Context, _, _ float64, start, end time.Time) ([]domain.TimelineWeatherDay, error) {
@@ -60,6 +63,7 @@ type OpenMeteoProvider struct {
 	Client   *http.Client
 }
 
+// NewOpenMeteo constructs the keyless historical-reanalysis adapter with a bounded client timeout.
 func NewOpenMeteo(endpoint string) *OpenMeteoProvider {
 	if endpoint == "" {
 		endpoint = "https://archive-api.open-meteo.com/v1/archive"
@@ -67,6 +71,7 @@ func NewOpenMeteo(endpoint string) *OpenMeteoProvider {
 	return &OpenMeteoProvider{Endpoint: endpoint, Client: &http.Client{Timeout: 5 * time.Second}}
 }
 
+// History requests Nairobi-local hourly reanalysis and preserves modeled soil values as weather context.
 func (p *OpenMeteoProvider) History(ctx context.Context, lat, lon float64, start, end time.Time) ([]domain.TimelineWeatherDay, error) {
 	u, err := url.Parse(p.Endpoint)
 	if err != nil {

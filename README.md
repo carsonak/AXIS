@@ -28,7 +28,7 @@ AXIS answers a practical question for a specific plot: how many litres should be
 - Data source, confidence, last refresh, and provider-model timestamps.
 - Optional AI explanations behind a disabled-by-default server feature flag. AI never calculates or changes irrigation values.
 
-Automated Go checks, frontend typechecking/building, the sanitized live Kijani payload, and the container path are verified. Deployment and physical-device offline acceptance remain separate manual checks; see [the current team handoff](docs/TEAM-HANDOFF.md).
+Automated Go checks, frontend tests/lint/typechecking/building, the sanitized live Kijani payload, the container path, and an isolated Fly/browser smoke flow are verified at their stated levels. Production and physical-device offline acceptance remain separate manual checks; see [the current team handoff](docs/TEAM-HANDOFF.md).
 
 ## Run locally
 

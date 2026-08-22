@@ -20,6 +20,10 @@ interface RecommendationRefreshValue {
 
 const RecommendationRefreshContext = createContext<RecommendationRefreshValue | undefined>(undefined)
 
+/**
+ * Owns the IndexedDB-first recommendation lifecycle shared by Today, Weather, and Recommendations.
+ * Network results become visible only after being persisted with their matching weather snapshot.
+ */
 export function RecommendationRefreshProvider({ children }: { children: ReactNode }) {
   const { selectedPlot, online } = useAxis()
   const selectedPlotID = selectedPlot?.id

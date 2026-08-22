@@ -73,11 +73,13 @@ function snapshotFromState({
   return structuredClone(snapshot)
 }
 
+/** Persists issuance-time decision evidence without mutating the current recommendation row. */
 export class DecisionSnapshotService {
   private finalization?: Promise<DecisionSnapshot[]>
 
   constructor(private database: AxisDatabase, private repositories: AxisRepositories) {}
 
+  /** Atomically records applied water and the reconciled decision state immediately after that event. */
   async recordIrrigationEvent(event: IrrigationEvent, recommendation: StoredRecommendation, plot: Pick<Plot, 'id' | 'areaM2'>): Promise<DecisionSnapshot> {
     if (event.plotId !== plot.id || recommendation.plot_id !== plot.id) {
       throw new Error('The irrigation event does not match the saved plot recommendation.')
@@ -105,12 +107,14 @@ export class DecisionSnapshotService {
     })
   }
 
+  /** Coalesces concurrent lifecycle checks and creates at most one final snapshot per plot/date. */
   finalizeEligibleDays(now = new Date()): Promise<DecisionSnapshot[]> {
     if (this.finalization) return this.finalization
     this.finalization = this.finalize(now).finally(() => { this.finalization = undefined })
     return this.finalization
   }
 
+  /** Uses Nairobi day boundaries; missed days are catch-ups built only from already-persisted local evidence. */
   private async finalize(now: Date): Promise<DecisionSnapshot[]> {
     const currentDate = nairobiDate(now)
     const currentHour = nairobiHour(now)

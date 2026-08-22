@@ -1,5 +1,6 @@
 import type { DecisionSnapshot, IrrigationEvent, Plot, StoredRecommendation, TimelineWeatherDay, TimelineWeatherRecord } from './types'
 
+// Historical reanalysis changes rarely; forecasts are deliberately short-lived. Retention and freshness are separate.
 export const HISTORICAL_TTL_MS = 30 * 24 * 60 * 60 * 1000
 export const FORECAST_TTL_MS = 60 * 60 * 1000
 export const HISTORICAL_RETENTION_DAYS = 180
@@ -15,6 +16,7 @@ export function timelineWeatherId(plot: Plot, day: TimelineWeatherDay): string {
   return [plot.id, plot.lat.toFixed(5), plot.lon.toFixed(5), day.date, day.kind, day.source].join(':')
 }
 
+/** Adds plot/location cache identity and source-specific freshness metadata to API days. */
 export function recordsForTimelineDays(plot: Plot, days: TimelineWeatherDay[], fetchedAt = new Date()): TimelineWeatherRecord[] {
   return days.map(day => {
     const ttl = day.kind === 'HISTORICAL' ? HISTORICAL_TTL_MS : FORECAST_TTL_MS
@@ -25,6 +27,7 @@ export function recordsForTimelineDays(plot: Plot, days: TimelineWeatherDay[], f
   })
 }
 
+/** Collapses stale duplicates by date while returning API-shaped values without IndexedDB metadata. */
 export function cachedTimelineDays(records: TimelineWeatherRecord[]): TimelineWeatherDay[] {
   const newest = new Map<string, TimelineWeatherRecord>()
   for (const record of records) {
@@ -53,6 +56,7 @@ export type LocalTimelineItem =
   | { id: string; at: string; type: 'IRRIGATION'; event: IrrigationEvent; snapshot?: DecisionSnapshot }
   | { id: string; at: string; type: 'SNAPSHOT'; snapshot: DecisionSnapshot }
 
+/** Merges local audit records without copying farmer data into provider weather cache rows. */
 export function buildLocalTimelineItems(date: string, recommendations: StoredRecommendation[], events: IrrigationEvent[], snapshots: DecisionSnapshot[]): LocalTimelineItem[] {
   const datedRecommendations = recommendations.filter(value => value.date === date)
   const datedEvents = events.filter(value => value.date === date)
