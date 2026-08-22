@@ -22,6 +22,30 @@ type recordingWeatherProvider struct {
 	requestedAt time.Time
 }
 
+type recordingHistoricalProvider struct {
+	lat, lon   float64
+	start, end time.Time
+	err        error
+}
+
+func (p *recordingHistoricalProvider) History(_ context.Context, lat, lon float64, start, end time.Time) ([]domain.TimelineWeatherDay, error) {
+	p.lat, p.lon, p.start, p.end = lat, lon, start, end
+	if p.err != nil {
+		return nil, p.err
+	}
+	value := 1.2
+	return []domain.TimelineWeatherDay{{Date: start.Format("2006-01-02"), Kind: "HISTORICAL", Source: "OPEN_METEO", Summary: domain.TimelineDailySummary{RainMM: &value}, Hourly: []domain.TimelineHourlyWeather{}}}, nil
+}
+
+type recordingForecastProvider struct {
+	days []domain.TimelineWeatherDay
+	err  error
+}
+
+func (p *recordingForecastProvider) ForecastSeries(context.Context, float64, float64, time.Time) ([]domain.TimelineWeatherDay, error) {
+	return p.days, p.err
+}
+
 type recordingInsightProvider struct {
 	input domain.InsightRequest
 	err   error
@@ -138,6 +162,56 @@ func TestLiveRecommendationUsesCurrentNairobiTimeForWeather(t *testing.T) {
 	_, offset := provider.requestedAt.Zone()
 	if provider.requestedAt.Hour() != 18 || provider.requestedAt.Minute() != 10 || offset != 3*60*60 {
 		t.Fatalf("weather requested at %s, want 18:10 UTC+03:00", provider.requestedAt)
+	}
+}
+
+func TestHistoricalWeatherContractAndBounds(t *testing.T) {
+	provider := &recordingHistoricalProvider{}
+	server := testServer(t)
+	server.Historical = provider
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/weather/history?latitude=-0.0917&longitude=34.768&start_date=2026-08-15&end_date=2026-08-19", nil)
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || provider.lat != -.0917 || provider.lon != 34.768 || !strings.Contains(rec.Body.String(), `"source":"OPEN_METEO"`) {
+		t.Fatalf("history response = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	for _, path := range []string{
+		"/api/v1/weather/history?latitude=-0.0917&longitude=34.768&start_date=2026-08-01&end_date=2026-08-19",
+		"/api/v1/weather/history?latitude=-0.0917&longitude=34.768&start_date=2026-08-19&end_date=2026-08-20",
+	} {
+		rec = httptest.NewRecorder()
+		server.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s returned %d", path, rec.Code)
+		}
+	}
+}
+
+func TestForecastCalculatesFutureRecommendationsWithZeroAppliedWater(t *testing.T) {
+	tMin, tMax, rain, probability, et0 := 18.0, 29.0, 4.0, .6, 4.8
+	modelRun := "2026-08-20T12:00:00Z"
+	provider := &recordingForecastProvider{days: []domain.TimelineWeatherDay{
+		{Date: "2026-08-20", Kind: "CURRENT", Source: "KIJANISPACE", Summary: domain.TimelineDailySummary{TMinC: &tMin, TMaxC: &tMax, RainMM: &rain}},
+		{Date: "2026-08-21", Kind: "FORECAST", Source: "KIJANISPACE", ProviderModelRunAt: &modelRun, Summary: domain.TimelineDailySummary{TMinC: &tMin, TMaxC: &tMax, RainMM: &rain, RainProbability: &probability, ET0MM: &et0}},
+	}}
+	server := testServer(t)
+	server.Forecast = provider
+	body := `{"plot":{"id":"plot-1","name":"Tomato plot","lat":-0.0917,"lon":34.768,"area_m2":1011.714,"crop_id":"tomato","planting_date":"2026-06-07","planting_date_estimated":false,"irrigation_method_id":"drip","flow_rate_lpm":45}}`
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/weather/forecast", strings.NewReader(body)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	var response domain.WeatherTimelineResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Days[0].Recommendation != nil || response.Days[1].Recommendation == nil {
+		t.Fatalf("current/future planning contract incorrect: %+v", response.Days)
+	}
+	if response.Days[1].Recommendation.Decision.AppliedTodayLitres != 0 || response.Days[1].Recommendation.Date != "2026-08-21" {
+		t.Fatalf("future water balance incorrect: %+v", response.Days[1].Recommendation.Decision)
 	}
 }
 

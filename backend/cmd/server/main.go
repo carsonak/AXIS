@@ -30,14 +30,22 @@ func main() {
 
 	mode := strings.ToLower(env("AXIS_WEATHER_MODE", "live"))
 	var weatherProvider weather.Provider
+	var historicalProvider weather.HistoricalProvider
+	var forecastProvider weather.ForecastSeriesProvider
 	if mode == "fixture" {
 		weatherProvider = weather.FixtureProvider{}
+		timelineFixture := weather.FixtureTimelineProvider{}
+		historicalProvider = timelineFixture
+		forecastProvider = timelineFixture
 	} else {
 		mode = "live"
+		kijani := weather.NewKijani(os.Getenv("KIJANISPACE_API_URL"), os.Getenv("KIJANISPACE_API_KEY"))
 		weatherProvider = weather.Chain{
-			Live:  weather.NewKijani(os.Getenv("KIJANISPACE_API_URL"), os.Getenv("KIJANISPACE_API_KEY")),
+			Live:  kijani,
 			Cache: weather.NewCache(60 * time.Minute), Fallback: climate, Logger: logger,
 		}
+		historicalProvider = weather.NewOpenMeteo(os.Getenv("OPEN_METEO_ARCHIVE_URL"))
+		forecastProvider = kijani
 	}
 
 	var insightProvider insights.Provider = insights.DisabledProvider{}
@@ -54,7 +62,7 @@ func main() {
 		logger.Error("load frontend", "error", err)
 		os.Exit(1)
 	}
-	server := &httpapi.Server{Catalog: cat, Weather: weatherProvider, Insights: insightProvider, WeatherMode: mode, Static: staticFiles, Logger: logger}
+	server := &httpapi.Server{Catalog: cat, Weather: weatherProvider, Historical: historicalProvider, Forecast: forecastProvider, Insights: insightProvider, WeatherMode: mode, Static: staticFiles, Logger: logger}
 	port := env("PORT", "8080")
 	writeTimeout := 15 * time.Second
 	if _, enabled := insightProvider.(*insights.CompatibleProvider); enabled && writeTimeout <= aiTimeout {

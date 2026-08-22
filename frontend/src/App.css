@@ -4248,3 +4248,253 @@ body, html, #root {
     border-radius: 50%;
   }
 }
+
+/* Agricultural weather and water timeline */
+.timeline-location-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.timeline-location-card div,
+.timeline-plan div,
+.timeline-local-row > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.timeline-location-card span,
+.timeline-intro,
+.timeline-plan span,
+.timeline-plan small,
+.timeline-local-row span,
+.timeline-unavailable {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.timeline-intro {
+  line-height: 1.5;
+  margin: 0 4px 18px;
+}
+
+.weather-timeline {
+  position: relative;
+  margin-top: 18px;
+}
+
+.timeline-load-sentinel {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0 18px 34px;
+}
+
+.timeline-day-card {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  position: relative;
+  padding-bottom: 18px;
+}
+
+.timeline-rail {
+  display: flex;
+  justify-content: center;
+  position: relative;
+}
+
+.timeline-rail::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: -18px;
+  width: 2px;
+  background: #d8e8d7;
+}
+
+.timeline-rail span {
+  width: 12px;
+  height: 12px;
+  margin-top: 25px;
+  border-radius: 50%;
+  background: #8caf89;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px #8caf89;
+  z-index: 1;
+}
+
+.timeline-day-card.today .timeline-rail span {
+  width: 16px;
+  height: 16px;
+  background: var(--primary-green);
+  box-shadow: 0 0 0 3px #bde0bd;
+}
+
+.timeline-day-content {
+  min-width: 0;
+  margin: 0;
+}
+
+.timeline-day-card.today .timeline-day-content {
+  border: 2px solid #74a977;
+  box-shadow: 0 8px 24px rgba(46, 125, 50, 0.12);
+}
+
+.timeline-day-head,
+.timeline-badges,
+.timeline-plan {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.timeline-day-head h2 {
+  font-size: 1rem;
+  margin-top: 3px;
+}
+
+.timeline-badges {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.timeline-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.timeline-summary-grid > div {
+  background: #f7faf6;
+  border: 1px solid #e2ebe0;
+  border-radius: 10px;
+  padding: 9px;
+  min-width: 0;
+}
+
+.timeline-summary-grid span,
+.timeline-summary-grid strong {
+  display: block;
+  font-size: 0.76rem;
+}
+
+.timeline-summary-grid span {
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.timeline-plan {
+  flex-wrap: wrap;
+  background: #edf7ed;
+  border: 1px solid #cfe4ce;
+  border-radius: 12px;
+  margin-top: 12px;
+  padding: 12px;
+}
+
+.timeline-plan div {
+  min-width: 110px;
+}
+
+.timeline-plan small {
+  flex-basis: 100%;
+}
+
+.timeline-unavailable {
+  padding: 14px 0 4px;
+}
+
+.timeline-local-events {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-light);
+}
+
+.timeline-local-events h3 {
+  font-size: 0.88rem;
+  margin-bottom: 9px;
+}
+
+.timeline-local-row {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 9px;
+  padding: 8px 0;
+  border-bottom: 1px dashed #e0e6df;
+}
+
+.timeline-local-row time {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  padding-top: 3px;
+}
+
+.timeline-local-row strong {
+  font-size: 0.82rem;
+}
+
+.timeline-local-row .badge {
+  align-self: flex-start;
+  width: fit-content;
+  font-size: 0.62rem;
+}
+
+.timeline-hourly {
+  margin-top: 12px;
+  border-top: 1px solid var(--border-light);
+  padding-top: 11px;
+}
+
+.timeline-hourly summary {
+  color: var(--primary-hover);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.timeline-hourly-list {
+  margin-top: 9px;
+  max-height: 330px;
+  overflow-y: auto;
+}
+
+.timeline-hour-row {
+  display: grid;
+  grid-template-columns: 48px 54px repeat(3, minmax(78px, 1fr));
+  gap: 7px;
+  padding: 7px 3px;
+  border-bottom: 1px solid #edf0ec;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .timeline-location-card,
+  .timeline-day-head {
+    align-items: flex-start;
+  }
+
+  .timeline-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .timeline-day-card {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .timeline-day-content {
+    padding: 13px;
+  }
+
+  .timeline-hourly-list {
+    overflow-x: auto;
+  }
+
+  .timeline-hour-row {
+    min-width: 465px;
+  }
+}
