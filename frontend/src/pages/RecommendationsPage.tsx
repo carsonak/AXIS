@@ -3,10 +3,10 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Alert, AppHeader, Badge, Card, EmptyState, Modal, Page, Spinner, SketchWaterDrop, SketchRain } from '../components'
 
 import { useAxis } from '../context'
-import { repos } from '../db'
+import { decisionSnapshotService } from '../decision-snapshots'
 import { useRecommendationRefresh } from '../recommendation-refresh'
 import { measuredLitres } from '../sensors'
-import type { IrrigationEvent, StoredRecommendation } from '../types'
+import type { IrrigationEvent, Plot, StoredRecommendation } from '../types'
 import { formatLitres, formatWindow, freshness, nairobiDate } from '../utils'
 
 export default function RecommendationsPage() {
@@ -163,7 +163,7 @@ export default function RecommendationsPage() {
       {showLogModal && recommendation && (
         <IrrigationModal
           recommendation={recommendation}
-          plotId={selectedPlot.id}
+          plot={selectedPlot}
           onClose={() => setShowLogModal(false)}
           onSaved={async () => {
             setShowLogModal(false)
@@ -176,7 +176,7 @@ export default function RecommendationsPage() {
   )
 }
 
-function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recommendation: StoredRecommendation; plotId: string; onClose(): void; onSaved(event: IrrigationEvent): void | Promise<void> }) {
+function IrrigationModal({ recommendation, plot, onClose, onSaved }: { recommendation: StoredRecommendation; plot: Pick<Plot, 'id' | 'areaM2'>; onClose(): void; onSaved(event: IrrigationEvent): void | Promise<void> }) {
   const [source, setSource] = useState<IrrigationEvent['source']>('FOLLOWED_RECOMMENDATION')
   const [litres, setLitres] = useState(String(recommendation.decision.litres))
   const [meterId, setMeterId] = useState('')
@@ -197,7 +197,7 @@ function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recomme
       if (!Number.isFinite(measured) || measured < 0) throw new Error('Enter a valid applied water volume in litres.')
       const event: IrrigationEvent = {
         id: crypto.randomUUID(),
-        plotId,
+        plotId: plot.id,
         date: nairobiDate(),
         litres: measured,
         recommendedLitres: recommendation.decision.litres_exact,
@@ -207,7 +207,7 @@ function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recomme
         meterStartLitres: source === 'FLOW_METER' ? Number(meterStart) : undefined,
         meterEndLitres: source === 'FLOW_METER' ? Number(meterEnd) : undefined
       }
-      await repos.saveEvent(event)
+      await decisionSnapshotService.recordIrrigationEvent(event, recommendation, plot)
       await onSaved(event)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save irrigation record.')

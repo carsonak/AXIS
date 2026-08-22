@@ -5,9 +5,10 @@ import { Alert, Badge, Card, EmptyState, Modal, Page, Spinner, SketchCrop, Sketc
 
 import { useAxis } from '../context'
 import { repos } from '../db'
+import { decisionSnapshotService } from '../decision-snapshots'
 import { useRecommendationRefresh } from '../recommendation-refresh'
 import { measuredLitres } from '../sensors'
-import type { IrrigationEvent, StoredInsight, StoredRecommendation } from '../types'
+import type { IrrigationEvent, Plot, StoredInsight, StoredRecommendation } from '../types'
 import { cropAgeDays, deriveStage, formatLitres, formatWindow, freshness, friendlyDate, nairobiDate, recommendationChange, relativeDataAge } from '../utils'
 
 export default function TodayPage() {
@@ -328,7 +329,7 @@ export default function TodayPage() {
 
       {(refreshing || insightLoading) && <Spinner label={refreshing ? 'Refreshing weather and advice…' : 'Generating insight…'} />}
       {showWhy && recommendation && <ExplanationModal recommendation={recommendation} onClose={() => setShowWhy(false)} />}
-      {showLog && recommendation && <IrrigationModal recommendation={recommendation} plotId={activePlot.id} onClose={() => setShowLog(false)} onSaved={async event => { setLatestEvent(event); setWeeklyWaterLitres(value => value + event.litres); setShowLog(false); await refresh() }} />}
+      {showLog && recommendation && <IrrigationModal recommendation={recommendation} plot={activePlot} onClose={() => setShowLog(false)} onSaved={async event => { setLatestEvent(event); setWeeklyWaterLitres(value => value + event.litres); setShowLog(false); await refresh() }} />}
     </Page>
   )
 }
@@ -385,7 +386,7 @@ function ExplanationModal({ recommendation, onClose }: { recommendation: StoredR
 
 
 
-function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recommendation: StoredRecommendation; plotId: string; onClose(): void; onSaved(event: IrrigationEvent): void | Promise<void> }) {
+function IrrigationModal({ recommendation, plot, onClose, onSaved }: { recommendation: StoredRecommendation; plot: Pick<Plot, 'id' | 'areaM2'>; onClose(): void; onSaved(event: IrrigationEvent): void | Promise<void> }) {
   const [source, setSource] = useState<IrrigationEvent['source']>('FOLLOWED_RECOMMENDATION')
   const [litres, setLitres] = useState(String(recommendation.decision.litres))
   const [meterId, setMeterId] = useState('')
@@ -406,7 +407,7 @@ function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recomme
       if (!Number.isFinite(measured) || measured < 0) throw new Error('Enter a valid applied water volume in litres.')
       const event: IrrigationEvent = {
         id: crypto.randomUUID(),
-        plotId,
+        plotId: plot.id,
         date: nairobiDate(),
         litres: measured,
         recommendedLitres: recommendation.decision.litres_exact,
@@ -416,7 +417,7 @@ function IrrigationModal({ recommendation, plotId, onClose, onSaved }: { recomme
         meterStartLitres: source === 'FLOW_METER' ? Number(meterStart) : undefined,
         meterEndLitres: source === 'FLOW_METER' ? Number(meterEnd) : undefined
       }
-      await repos.saveEvent(event)
+      await decisionSnapshotService.recordIrrigationEvent(event, recommendation, plot)
       await onSaved(event)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save irrigation record.')
