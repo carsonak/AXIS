@@ -8,7 +8,7 @@
 
 We are building an **offline-friendly farming assistant that tells a farmer how much water their crop needs today**, using information about their farm, crop and upcoming weather.
 
-> **Implementation status:** The deterministic engine, API, offline-oriented PWA, local history, rolling Kijani integration, refresh controls, and fallback paths are implemented. Automated, live-payload, and container evidence is recorded separately from outstanding deployment and physical-device acceptance. AI and sensor adjustment remain safely gated.
+> **Implementation status:** The deterministic engine, API, offline-oriented PWA, local history, rolling Kijani integration, refresh controls, and fallback paths are implemented. Automated, live-payload, container, and isolated development-deployment evidence is recorded separately from outstanding production and physical-device acceptance. AI and sensor adjustment remain safely gated.
 
 ---
 

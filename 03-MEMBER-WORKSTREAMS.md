@@ -15,7 +15,7 @@ Status legend: ✅ implemented and verified; 🟡 implemented but manually unver
 
 - ✅ Implemented health, catalog, recommendation, validation/error, static SPA/fallback, and disabled-insights handlers with Go tests.
 - ✅ Wired the deterministic engine and weather provider chain into the stateless service.
-- 🟡 A bound container smoke test has recorded verification; deployed HTTPS behavior remains unverified.
+- ✅ A bound container smoke test and isolated Fly HTTPS/API smoke tests have recorded verification; production release verification remains separate.
 
 ## M3 — Irrigation engine and agronomy
 
@@ -25,8 +25,8 @@ Status legend: ✅ implemented and verified; 🟡 implemented but manually unver
 
 ## M4 — IndexedDB, PWA, refresh, and history
 
-- ✅ Implemented Dexie repositories for plots, recommendations, irrigation events, catalog, settings, insights, and sensor readings.
-- ✅ Implemented IndexedDB-first recommendation display, hourly foreground refresh, reconnect/resume checks, manual refresh, history/chart, and local irrigation logging.
+- ✅ Implemented Dexie repositories for plots, recommendations, irrigation events, catalog, settings, insights, sensor readings, immutable decision snapshots, and bounded timeline weather.
+- ✅ Implemented IndexedDB-first recommendation display, hourly foreground refresh, reconnect/resume checks, manual refresh, history/chart, local irrigation logging, event/end-of-day snapshots, and cached historical/forecast timeline rendering.
 - ✅ Production PWA generation passes the frontend build.
 - 🟡 Physical install, force-close/reopen, offline event recording, storage survival, and second-device acceptance remain unverified.
 
@@ -35,7 +35,7 @@ Status legend: ✅ implemented and verified; 🟡 implemented but manually unver
 - ✅ Implemented `/v1/agro_climate/land`, generic environment-supplied authentication, rolling hourly mapping, provider timestamps, three-second timeout, memory cache, fixture, and climatology fallback.
 - ✅ Added the sanitized Kisumu live fixture, parser regression tests, API client, CI integration, and container path.
 - ↪ The original `/water` endpoint and fixed indices `0–23` were corrected.
-- ⬜ No `fly.toml`, Fly deployment, deployed HTTPS smoke test, or physical live integration is recorded.
+- ✅ Added `fly.toml`; isolated Fly HTTPS, live Kijani, timeline, recommendation-feedback, and responsive browser smoke checks are recorded. Production and physical-device acceptance remain separate.
 - ⛔ AI remains an optional disabled explanation adapter, not part of irrigation calculation.
 
 ## Integration record
@@ -47,6 +47,8 @@ Status legend: ✅ implemented and verified; 🟡 implemented but manually unver
 | IndexedDB → UI | ✅ Implemented; 🟡 device acceptance pending |
 | Online refresh → stored advice | ✅ Implemented; 🟡 browser timing acceptance pending |
 | Static PWA → Go server/container | ✅ Build and container path verified |
+| Open-Meteo/Kijani → weather timeline | ✅ Automated, container, and isolated-deployment evidence recorded |
+| Deployed service → responsive browser | ✅ Isolated smoke flow recorded |
 | Deployed service → physical phone | ⬜ Outstanding |
 
 Before handoff, run `mise run check`. Treat container, live-provider, browser, deployment, and physical-device results as separate evidence.

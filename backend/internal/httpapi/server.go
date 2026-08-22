@@ -18,6 +18,7 @@ import (
 	"axis/backend/internal/weather"
 )
 
+// Server wires stateless calculation and provider dependencies; it never persists farmer records.
 type Server struct {
 	Catalog     domain.Catalog
 	Weather     weather.Provider
@@ -30,6 +31,7 @@ type Server struct {
 	Logger      *slog.Logger
 }
 
+// Handler exposes the versioned JSON API and, when configured, the embedded SPA with security/recovery middleware.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", s.health)

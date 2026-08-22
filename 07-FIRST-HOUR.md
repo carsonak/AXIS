@@ -28,8 +28,8 @@ Status legend: ✅ implemented and verified; 🟡 implemented but manually unver
 - ↪ Land coordinates use `/v1/agro_climate/land`; the original `/water` assumption was removed.
 - ✅ Forecast temperature, precipitation, probability, windspeed, ET₀, timestamps, fallback, timeout, and cache paths are implemented.
 - ✅ Container build/runtime has recorded verification.
-- ⬜ Fly configuration/deployment and deployed health verification are not present.
+- ✅ `fly.toml` and isolated development deployment/health verification are recorded. Production release and physical-device verification remain outstanding.
 
 ## Exit-gate result
 
-The code foundations and contracts passed; deployment and physical-device gates did not. Those outstanding checks remain in [`docs/TEAM-HANDOFF.md`](docs/TEAM-HANDOFF.md) and must not be inferred from automated builds.
+The code foundations and contracts passed; a later isolated development deployment passed its recorded smoke checks, while production and physical-device gates remain open. Those outstanding checks remain in [`docs/TEAM-HANDOFF.md`](docs/TEAM-HANDOFF.md) and must not be inferred from automated builds.

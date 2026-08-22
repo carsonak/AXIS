@@ -4,11 +4,11 @@ Offline is a judged product feature, not a late browser optimization.
 
 ## Current implementation
 
-- ✅ Dexie repositories, local plot/recommendation/event/insight/sensor/decision-snapshot tables, seven-day queries, freshness helpers, and PWA production generation are implemented and pass typecheck/build.
+- ✅ Dexie repositories, local plot/recommendation/event/insight/sensor/decision-snapshot/timeline-weather tables, seven-day queries, freshness helpers, and PWA production generation are implemented and pass typecheck/build.
 - ✅ Today, Weather, and Recommendations share an IndexedDB-first refresh coordinator. Existing advice refreshes hourly while `/app` is active and supports manual refresh.
-- 🟡 Browser timing, reconnect/resume, and force-close/reopen behavior have not been verified on a physical phone.
+- ✅ An isolated deployed browser smoke flow verified responsive timeline interaction and an active-page offline transition. 🟡 Reconnect/resume timing and force-close/reopen behavior have not been verified on a physical phone.
 - 🟡 Offline irrigation recording, history, chart, and manual flow-meter delta paths are implemented but still require the two prescribed device cycles.
-- ⬜ Home-screen installation, storage behavior on a second device, and deployed HTTPS service-worker behavior remain pending.
+- ⬜ Home-screen installation, storage behavior on a second device, and physical-device HTTPS service-worker behavior remain pending.
 - ⛔ There is no backend synchronization queue because farmer data intentionally remains device-local.
 
 ## 1. Device data model
@@ -24,6 +24,7 @@ settings
 insights
 sensorReadings
 decisionSnapshots
+timelineWeather
 ```
 
 No outbox is needed in the hackathon MVP because the backend stores no user data. Local writes are final local writes.
@@ -82,6 +83,10 @@ Optional cached AI explanations. They are derived from deterministic recommendat
 ### `catalog`
 
 Mirror `GET /catalog` so a previously opened app can edit/create a plot offline.
+
+### `timelineWeather`
+
+Cache weather days by plot, coordinates, date, kind, and source. Historical reanalysis is fresh for 30 days and retained for 180 days; current/forecast entries are fresh for 60 minutes and retained for 14 days. Coordinate filtering prevents a moved plot from displaying weather cached for its previous location. Local recommendations, irrigation events, and decision snapshots are merged at render time rather than copied into provider weather rows.
 
 ## 2. UI data rule
 
