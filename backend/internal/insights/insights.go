@@ -63,7 +63,7 @@ func (p *CompatibleProvider) Generate(ctx context.Context, input domain.InsightR
 	req.Header.Set("Content-Type", "application/json")
 	client := p.Client
 	if client == nil {
-		client = &http.Client{Timeout: 8 * time.Second}
+		client = &http.Client{Timeout: 30 * time.Second}
 	}
 	resp, err := client.Do(req)
 	if err != nil {
